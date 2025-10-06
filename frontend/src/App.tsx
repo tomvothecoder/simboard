@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 
-import { useSimulations } from '@/api/simulations';
+import { useSimulations } from '@/api/simulation';
 import NavBar from '@/components/layout/NavBar';
 import { AppRoutes } from '@/routes/routes';
 

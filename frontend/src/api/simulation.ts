@@ -1,12 +1,16 @@
-import axios from 'axios';
 import { useEffect, useMemo, useState } from 'react';
 
+import axiosInstance from '@/api/axios';
 import type { Simulation } from '@/types';
 
-const SIMULATIONS_URL = '/mock/simulations.json';
+const SIMULATIONS_URL = '/simulations';
 
-export const fetchSimulations = async (url: string = SIMULATIONS_URL): Promise<Simulation[]> => {
-  const res = await axios.get<Simulation[]>(url, { headers: { 'Cache-Control': 'no-cache' } });
+export const fetchSimulations = async (
+  url: string = SIMULATIONS_URL
+): Promise<Simulation[]> => {
+  const res = await axiosInstance.get<Simulation[]>(url, {
+    headers: { 'Cache-Control': 'no-cache' },
+  });
 
   return res.data;
 };
