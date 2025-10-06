@@ -4,13 +4,14 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import LatestSimulationsTable from '@/pages/Home/LatestSimulationsTable';
 import VariableCard from '@/pages/Home/VariableCard';
-import type { Simulation } from '@/types/index';
+import type { Machine, Simulation } from '@/types/index';
 
 interface HomeProps {
   simulations: Simulation[];
+  machines: Machine[]
 }
 
-const Home = ({ simulations }: HomeProps) => {
+const Home = ({ simulations, machines }: HomeProps) => {
   const latestSimulations = [...simulations]
     .sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime())
     .slice(0, 6);
@@ -226,6 +227,43 @@ const Home = ({ simulations }: HomeProps) => {
               </Button>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="w-full max-w-7xl mx-auto mt-12">
+        <h2 className="text-2xl font-bold mb-2">Machines</h2>
+        <p className="text-muted-foreground mb-4">
+          Explore the machines used for running E3SM simulations, including their configurations and details.
+        </p>
+        <div className="bg-white border border-muted rounded-xl shadow p-6">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b">
+              <th className="text-left p-2">Name</th>
+              <th className="text-left p-2">Location</th>
+              <th className="text-left p-2">Architecture</th>
+              <th className="text-left p-2">Scheduler</th>
+              <th className="text-left p-2">GPU</th>
+              <th className="text-left p-2">Simulation Count</th>
+              <th className="text-left p-2">Notes</th>
+              <th className="text-left p-2">Created At</th>
+              </tr>
+            </thead>
+            <tbody>
+              {machines.map((machine) => (
+              <tr key={machine.id} className="border-b">
+                <td className="p-2">{machine.name}</td>
+                <td className="p-2">{machine.site || 'N/A'}</td>
+                <td className="p-2">{machine.architecture || 'N/A'}</td>
+                <td className="p-2">{machine.scheduler || 'N/A'}</td>
+                <td className="p-2">{machine.gpu ? 'Yes' : 'No'}</td>
+                <td className="p-2">{simulations.filter((sim) => sim.machineId === machine.id).length}</td>
+                <td className="p-2">{machine.notes || 'N/A'}</td>
+                <td className="p-2">{machine.createdAt ? new Date(machine.createdAt).toLocaleDateString() : 'N/A'}</td>
+              </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </section>
     </main>

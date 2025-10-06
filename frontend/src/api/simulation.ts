@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import axiosInstance from '@/api/axios';
-import type { Simulation } from '@/types';
+import type { Machine, Simulation } from '@/types';
 
 const SIMULATIONS_URL = '/simulations';
 
@@ -45,3 +45,39 @@ export const useSimulations = (url: string = SIMULATIONS_URL) => {
 
   return { data, loading, error, byId };
 };
+
+export const useMachines = (url: string = '/machines') => {
+  const [data, setData] = useState<Machine[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    axiosInstance.get<Machine[]>(url, {
+      headers: { 'Cache-Control': 'no-cache' },
+    })
+      .then((res) => {
+        if (!cancelled) setData(res.data);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e.message);
+      }
+      )
+
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      }
+      );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  const byId = useMemo(() => new Map(data.map((s) => [s.id, s])), [data]);
+
+  return { data, loading, error, byId };
+}

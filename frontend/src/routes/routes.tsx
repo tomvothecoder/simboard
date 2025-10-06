@@ -9,10 +9,11 @@ import Home from '@/pages/Home/Home';
 import SimulationDetails from '@/pages/SimulationsCatalog/SimulationDetails';
 import SimulationsCatalog from '@/pages/SimulationsCatalog/SimulationsCatalog';
 import Upload from '@/pages/Upload/Upload';
-import type { Simulation } from '@/types/index';
+import type { Machine, Simulation } from '@/types/index';
 
 interface RoutesProps {
   simulations: Simulation[];
+  machines: Machine[];
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
   selectedSimulations: Simulation[];
@@ -46,12 +47,13 @@ const SimulationDetailsRoute = () => {
 
 const createRoutes = ({
   simulations,
+  machines,
   selectedSimulationIds,
   setSelectedSimulationIds,
   selectedSimulations,
 }: RoutesProps): RouteObject[] => {
   return [
-    { path: '/', element: <Home simulations={simulations} /> },
+    { path: '/', element: <Home simulations={simulations} machines={machines} /> },
     {
       path: '/browse',
       element: (
@@ -84,12 +86,14 @@ const createRoutes = ({
 
 export const AppRoutes = ({
   simulations,
+  machines,
   selectedSimulationIds,
   setSelectedSimulationIds,
   selectedSimulations,
 }: RoutesProps) => {
   const routes = createRoutes({
     simulations,
+    machines,
     selectedSimulationIds,
     setSelectedSimulationIds,
     selectedSimulations,

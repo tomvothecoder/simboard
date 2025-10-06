@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 
-import { useSimulations } from '@/api/simulation';
+import { useMachines, useSimulations } from '@/api/simulation';
 import NavBar from '@/components/layout/NavBar';
 import { AppRoutes } from '@/routes/routes';
 
@@ -15,6 +15,7 @@ const App = () => {
 
   // Fetch simulations data using custom hook.
   const simulations = useSimulations();
+  const machines = useMachines()
 
   const [selectedSimulationIds, setSelectedSimulationIds] = useState<string[]>(() => {
     const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -37,6 +38,7 @@ const App = () => {
         <NavBar selectedSimulationIds={selectedSimulationIds} />
         <AppRoutes
           simulations={simulations.data}
+          machines={machines.data}
           selectedSimulationIds={selectedSimulationIds}
           setSelectedSimulationIds={setSelectedSimulationIds}
           selectedSimulations={selectedSimulations}
