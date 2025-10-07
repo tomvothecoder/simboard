@@ -9,86 +9,122 @@ from app.schemas.link import ExternalLinkIn, ExternalLinkOut
 
 
 class SimulationCreate(CamelInModel):
-    # required
+    # Configuration
+    # ~~~~~~~~~~~~~~
     name: str
     case_name: str
+    version_tag: str | None = None
+    git_hash: str | None = None
     compset: str
     compset_alias: str
     grid_name: str
     grid_resolution: str
-    initialization_type: str
+    parent_simulation_id: UUID | None = None
+
+    # Model setup/context
+    # ~~~~~~~~~~~~~~~~~~~
     simulation_type: str
     status: str
-    machine_id: UUID
-    model_start_date: datetime
-
-    # optional
-    version_tag: str | None = None
-    git_hash: str | None = None
-    parent_simulation_id: UUID | None = None
     campaign_id: str | None = None
     experiment_type_id: str | None = None
+    initialization_type: str
     group_name: str | None = None
+
+    # Model timeline
+    # ~~~~~~~~~~~~~~
+    machine_id: UUID
+    simulation_start_date: datetime
     simulation_end_date: datetime | None = None
     total_years: float | None = None
     run_start_date: datetime | None = None
     run_end_date: datetime | None = None
     compiler: str | None = None
+
+    # Metadata & audit
+    # ~~~~~~~~~~~~~~~~~
     notes_markdown: str | None = None
     known_issues: str | None = None
+
+    # Version control
+    # ~~~~~~~~~~~~~~~
     branch: str | None = None
     external_repo_url: str | None = None
-    uploaded_by: str | None = None
-    upload_date: datetime | None = None
-    last_modified: datetime | None = None
+
+    # Provenance & submission
+    # ~~~~~~~~~~~~~~~~~~~~~~~
+    created_by: str | None = None
     last_edited_by: str | None = None
-    last_edited_at: datetime | None = None
+
+    # Miscellaneous
+    # ~~~~~~~~~~~~~~~~~
+    # extra -- Extra metadata in flexible dictionary/JSON format.
+    # Useful for extensions or storing non-core data.
     extra: dict = {}
 
-    artifacts: list[ArtifactIn] | None = None
-    links: list[ExternalLinkIn] | None = None
+    # Relationships
+    # ~~~~~~~~~~~~~~
+    artifacts: list[ArtifactIn] = Field(default_factory=list)
+    links: list[ExternalLinkIn] = Field(default_factory=list)
 
 
 class SimulationOut(CamelOutModel):
-    # Required fields.
+    # Configuration
+    # ~~~~~~~~~~~~~~
     id: UUID
     name: str
     case_name: str
+    version_tag: str | None = None
+    git_hash: str | None = None
     compset: str
     compset_alias: str
     grid_name: str
     grid_resolution: str
-    initialization_type: str
+    parent_simulation_id: UUID | None = None
+
+    # Model setup/context
+    # ~~~~~~~~~~~~~~~~~~~
     simulation_type: str
     status: str
-    machine_id: UUID
-    model_start_date: datetime
-
-    # Optional fields.
-    version_tag: str | None = None
-    git_hash: str | None = None
-    parent_simulation_id: UUID | None = None
     campaign_id: str | None = None
     experiment_type_id: str | None = None
+    initialization_type: str
     group_name: str | None = None
+
+    # Model timeline
+    # ~~~~~~~~~~~~~~
+    machine_id: UUID
+    simulation_start_date: datetime
     simulation_end_date: datetime | None = None
     total_years: float | None = None
     run_start_date: datetime | None = None
     run_end_date: datetime | None = None
     compiler: str | None = None
+
+    # Metadata & audit
+    # ~~~~~~~~~~~~~~~~~
     notes_markdown: str | None = None
     known_issues: str | None = None
+
+    # Version control
+    # ~~~~~~~~~~~~~~~
     branch: str | None = None
     external_repo_url: str | None = None
-    uploaded_by: str | None = None
-    upload_date: datetime | None = None
-    last_modified: datetime | None = None
+
+    # Provenance & submission
+    # ~~~~~~~~~~~~~~~~~~~~~~~
+    created_by: str | None = None
     last_edited_by: str | None = None
-    last_edited_at: datetime | None = None
+
+    created_at: datetime  # Server-managed field
+    updated_at: datetime  # Server-managed field
+
+    # Miscellaneous
+    # ~~~~~~~~~~~~~~~~~
+    # extra -- Extra metadata in flexible dictionary/JSON format.
+    # Useful for extensions or storing non-core data.
     extra: dict = {}
 
-    created_at: datetime
-    updated_at: datetime
-
+    # Relationships
+    # ~~~~~~~~~~~~~~
     artifacts: list[ArtifactOut] = Field(default_factory=list)
     links: list[ExternalLinkOut] = Field(default_factory=list)

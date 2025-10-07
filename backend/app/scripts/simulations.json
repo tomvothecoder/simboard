@@ -2,20 +2,23 @@
   {
     "name": "E3SM v1.1.0 piControl",
     "caseName": "E3SMv1_piControl_DECK_r1i1p1f1",
+    "versionTag": "v1.1.0",
+    "gitHash": "abc1234",
     "compset": "PICNTRL",
     "compsetAlias": "piControl",
     "gridName": "ne30_oECv3",
     "gridResolution": "1°",
-    "initializationType": "restart",
     "simulationType": "experimental",
     "status": "completed",
-    "modelStartDate": "1900-01-01T00:00:00Z",
-    "simulationEndDate": "1950-12-31T00:00:00Z",
-    "versionTag": "v1.1.0",
-    "gitHash": "abc1234",
     "campaignId": "DECK",
     "experimentTypeId": "piControl",
+    "initializationType": "restart",
     "groupName": "E3SM Control Group",
+    "machine": {
+      "name": "perlmutter"
+    },
+    "simulationStartDate": "1900-01-01T00:00:00Z",
+    "simulationEndDate": "1950-12-31T00:00:00Z",
     "totalYears": 50,
     "runStartDate": "2019-01-01T00:00:00Z",
     "runEndDate": "2019-06-01T00:00:00Z",
@@ -24,17 +27,11 @@
     "knownIssues": "Occasional model drift after year 45.",
     "branch": "main",
     "externalRepoUrl": "https://github.com/E3SM-Project/E3SM",
-    "uploadedBy": "Alice Smith",
-    "uploadDate": "2024-06-10T00:00:00Z",
-    "lastModified": "2024-06-11T00:00:00Z",
+    "createdBy": "Alice Smith",
     "lastEditedBy": "Alice Smith",
-    "lastEditedAt": "2024-06-11T12:00:00Z",
     "extra": {
       "variables": ["tas", "pr", "rsds"],
       "annotations": ["piControl baseline"]
-    },
-    "machine": {
-      "name": "perlmutter"
     },
     "artifacts": [
       {
@@ -64,20 +61,23 @@
   {
     "name": "E3SM v2.0.0 Historical",
     "caseName": "E3SMv2_HIST_CMIP6_r2i1p1f1",
+    "versionTag": "v2.0.0",
+    "gitHash": "def5678",
     "compset": "HIST",
     "compsetAlias": "historical",
     "gridName": "ne30_oECv3",
     "gridResolution": "1°",
-    "initializationType": "restart",
     "simulationType": "production",
     "status": "running",
-    "modelStartDate": "1850-01-01T00:00:00Z",
-    "simulationEndDate": "2014-12-31T00:00:00Z",
-    "versionTag": "v2.0.0",
-    "gitHash": "def5678",
     "campaignId": "CMIP6",
     "experimentTypeId": "historical",
+    "initializationType": "restart",
     "groupName": "E3SM CMIP6",
+    "machine": {
+      "name": "compy"
+    },
+    "simulationStartDate": "1850-01-01T00:00:00Z",
+    "simulationEndDate": "2014-12-31T00:00:00Z",
     "totalYears": 165,
     "runStartDate": "2020-01-01T00:00:00Z",
     "compiler": "gnu",
@@ -85,17 +85,11 @@
     "knownIssues": "None reported.",
     "branch": "release-v2",
     "externalRepoUrl": "https://github.com/E3SM-Project/E3SM",
-    "uploadedBy": "Bob Lee",
-    "uploadDate": "2024-06-15T00:00:00Z",
-    "lastModified": "2024-06-16T00:00:00Z",
+    "createdBy": "Bob Lee",
     "lastEditedBy": "Bob Lee",
-    "lastEditedAt": "2024-06-16T10:00:00Z",
     "extra": {
       "variables": ["tas", "pr", "rsdt", "rlut"],
       "annotations": ["historical CMIP6 run"]
-    },
-    "machine": {
-      "name": "compy"
     },
     "artifacts": [
       {
@@ -125,37 +119,34 @@
   {
     "name": "E3SM v3.0.0 SSP585",
     "caseName": "E3SMv3_SSP585_CMIP6_r3i1p1f1",
+    "versionTag": "v3.0.0",
+    "gitHash": "7890abc",
     "compset": "SSP585",
     "compsetAlias": "ssp585",
     "gridName": "ne30_oECv3",
     "gridResolution": "1°",
-    "initializationType": "restart",
     "simulationType": "projection",
     "status": "queued",
-    "modelStartDate": "2015-01-01T00:00:00Z",
-    "simulationEndDate": "2100-12-31T00:00:00Z",
-    "versionTag": "v3.0.0",
-    "gitHash": "7890abc",
     "campaignId": "CMIP6",
     "experimentTypeId": "ssp585",
+    "initializationType": "restart",
     "groupName": "E3SM Future Projections",
+    "machine": {
+      "name": "frontier"
+    },
+    "simulationStartDate": "2015-01-01T00:00:00Z",
+    "simulationEndDate": "2100-12-31T00:00:00Z",
     "totalYears": 85,
     "compiler": "intel",
     "notesMarkdown": "High-emissions scenario (SSP5-8.5) projection using E3SM v3.0.0.",
     "knownIssues": "Pending ocean coupling validation.",
     "branch": "main",
     "externalRepoUrl": "https://github.com/E3SM-Project/E3SM",
-    "uploadedBy": "Carol Nguyen",
-    "uploadDate": "2024-07-01T00:00:00Z",
-    "lastModified": "2024-07-02T00:00:00Z",
+    "createdBy": "Carol Nguyen",
     "lastEditedBy": "Carol Nguyen",
-    "lastEditedAt": "2024-07-02T12:00:00Z",
     "extra": {
       "variables": ["tas", "tos", "co2mass"],
       "annotations": ["future scenario"]
-    },
-    "machine": {
-      "name": "frontier"
     },
     "artifacts": [
       {
@@ -182,7 +173,7 @@
     "initializationType": "restart",
     "simulationType": "production",
     "status": "completed",
-    "modelStartDate": "1979-01-01T00:00:00Z",
+    "simulationStartDate": "1979-01-01T00:00:00Z",
     "simulationEndDate": "2020-12-31T00:00:00Z",
     "versionTag": "v3.1.0",
     "gitHash": "aa55cc3",
@@ -230,7 +221,7 @@
     "initializationType": "restart",
     "simulationType": "experimental",
     "status": "running",
-    "modelStartDate": "2000-01-01T00:00:00Z",
+    "simulationStartDate": "2000-01-01T00:00:00Z",
     "simulationEndDate": "2020-12-31T00:00:00Z",
     "versionTag": "v3.2.0",
     "compiler": "intel",
@@ -275,7 +266,7 @@
     "initializationType": "startup",
     "simulationType": "test",
     "status": "queued",
-    "modelStartDate": "1990-01-01T00:00:00Z",
+    "simulationStartDate": "1990-01-01T00:00:00Z",
     "simulationEndDate": "1995-12-31T00:00:00Z",
     "versionTag": "v3.3.0",
     "compiler": "gnu",
@@ -316,7 +307,7 @@
     "initializationType": "restart",
     "simulationType": "development",
     "status": "failed",
-    "modelStartDate": "2020-01-01T00:00:00Z",
+    "simulationStartDate": "2020-01-01T00:00:00Z",
     "simulationEndDate": "2021-12-31T00:00:00Z",
     "versionTag": "v3.4.0",
     "compiler": "intel",
@@ -357,7 +348,7 @@
     "initializationType": "restart",
     "simulationType": "experimental",
     "status": "created",
-    "modelStartDate": "1950-01-01T00:00:00Z",
+    "simulationStartDate": "1950-01-01T00:00:00Z",
     "simulationEndDate": "1955-12-31T00:00:00Z",
     "versionTag": "v3.5.0",
     "compiler": "gnu",

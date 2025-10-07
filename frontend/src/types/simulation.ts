@@ -5,95 +5,126 @@ import type { Machine } from "@/types/machine";
 
 /**
  * Request payload for creating a new simulation.
+ * Equivalent to FastAPI SimulationCreate schema.
  */
 export interface SimulationCreate {
-  // Required fields
+  // Configuration
+  // ~~~~~~~~~~~~~~
   name: string;
   caseName: string;
+  versionTag?: string | null;
+  gitHash?: string | null;
   compset: string;
   compsetAlias: string;
   gridName: string;
   gridResolution: string;
-  initializationType: string;
+  parentSimulationId?: string | null;
+
+  // Model setup/context
+  // ~~~~~~~~~~~~~~~~~~~
   simulationType: string;
   status: string;
-  machineId: string; // UUID
-  modelStartDate: string; // ISO datetime
-
-  // Optional fields
-  versionTag?: string | null;
-  gitHash?: string | null;
-  parentSimulationId?: string | null;
   campaignId?: string | null;
   experimentTypeId?: string | null;
+  initializationType: string;
   groupName?: string | null;
+
+  // Model timeline
+  // ~~~~~~~~~~~~~~
+  machineId: string; // UUID
+  simulationStartDate: string; // ISO datetime
   simulationEndDate?: string | null;
   totalYears?: number | null;
   runStartDate?: string | null;
   runEndDate?: string | null;
   compiler?: string | null;
+
+  // Metadata & audit
+  // ~~~~~~~~~~~~~~~~~
   notesMarkdown?: string | null;
   knownIssues?: string | null;
+
+  // Version control
+  // ~~~~~~~~~~~~~~~
   branch?: string | null;
   externalRepoUrl?: string | null;
-  uploadedBy?: string | null;
-  uploadDate?: string | null;
-  lastModified?: string | null;
+
+  // Provenance & submission
+  // ~~~~~~~~~~~~~~~~~~~~~~~
+  createdBy?: string | null;
   lastEditedBy?: string | null;
-  lastEditedAt?: string | null;
+
+  // Miscellaneous
+  // ~~~~~~~~~~~~~~~~~
   extra?: Record<string, unknown>;
 
   // Relationships
-  artifacts?: ArtifactIn[] | null;
-  links?: ExternalLinkIn[] | null;
+  // ~~~~~~~~~~~~~~
+  artifacts: ArtifactIn[];
+  links: ExternalLinkIn[];
 }
 
 /**
  * API response model for a simulation (from FastAPI / DB).
+ * Equivalent to FastAPI SimulationOut schema.
  */
 export interface SimulationOut {
-  // Required fields
+  // Configuration
+  // ~~~~~~~~~~~~~~
   id: string;
   name: string;
   caseName: string;
+  versionTag?: string | null;
+  gitHash?: string | null;
   compset: string;
   compsetAlias: string;
   gridName: string;
   gridResolution: string;
-  initializationType: string;
+  parentSimulationId?: string | null;
+
+  // Model setup/context
+  // ~~~~~~~~~~~~~~~~~~~
   simulationType: string;
   status: string;
-  machineId: string;
-  modelStartDate: string;
-
-  // Optional fields
-  versionTag?: string | null;
-  gitHash?: string | null;
-  parentSimulationId?: string | null;
   campaignId?: string | null;
   experimentTypeId?: string | null;
+  initializationType: string;
   groupName?: string | null;
+
+  // Model timeline
+  // ~~~~~~~~~~~~~~
+  machineId: string; // UUID
+  simulationStartDate: string; // ISO datetime
   simulationEndDate?: string | null;
   totalYears?: number | null;
   runStartDate?: string | null;
   runEndDate?: string | null;
   compiler?: string | null;
+
+  // Metadata & audit
+  // ~~~~~~~~~~~~~~~~~
   notesMarkdown?: string | null;
   knownIssues?: string | null;
+
+  // Version control
+  // ~~~~~~~~~~~~~~~
   branch?: string | null;
   externalRepoUrl?: string | null;
-  uploadedBy?: string | null;
-  uploadDate?: string | null;
-  lastModified?: string | null;
+
+  // Provenance & submission
+  // ~~~~~~~~~~~~~~~~~~~~~~~
+  createdBy?: string | null;
   lastEditedBy?: string | null;
-  lastEditedAt?: string | null;
+
+  createdAt: string; // Server-managed field
+  updatedAt: string; // Server-managed field
+
+  // Miscellaneous
+  // ~~~~~~~~~~~~~~~~~
   extra?: Record<string, unknown>;
 
-  // Server-managed fields
-  createdAt: string;
-  updatedAt: string;
-
   // Relationships
+  // ~~~~~~~~~~~~~~
   artifacts: ArtifactOut[];
   links: ExternalLinkOut[];
 }

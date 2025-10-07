@@ -74,13 +74,13 @@ def seed_from_json(db: Session, json_path: str):
             **{
                 **entry,
                 "machineId": machine.id,  # ✅ use real ID from DB
-                "modelStartDate": _parse_datetime(entry["modelStartDate"]),
+                "simulationStartDate": _parse_datetime(
+                    entry.get("simulationStartDate")
+                ),
                 "simulationEndDate": _parse_datetime(entry.get("simulationEndDate")),
                 "runStartDate": _parse_datetime(entry.get("runStartDate")),
                 "runEndDate": _parse_datetime(entry.get("runEndDate")),
                 "uploadDate": _parse_datetime(entry.get("uploadDate")),
-                "lastModified": _parse_datetime(entry.get("lastModified")),
-                "lastEditedAt": _parse_datetime(entry.get("lastEditedAt")),
                 "artifacts": [
                     ArtifactIn(**artifact) for artifact in entry.get("artifacts", [])
                 ],
