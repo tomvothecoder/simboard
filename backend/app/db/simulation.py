@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Float, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -53,7 +53,6 @@ class Simulation(Base, IDMixin, TimestampMixin):
     simulation_end_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
-    total_years: Mapped[float | None] = mapped_column(Float)
     run_start_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     run_end_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     compiler: Mapped[str | None] = mapped_column(String(100))

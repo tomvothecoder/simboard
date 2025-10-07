@@ -19,7 +19,6 @@
     },
     "simulationStartDate": "1900-01-01T00:00:00Z",
     "simulationEndDate": "1950-12-31T00:00:00Z",
-    "totalYears": 50,
     "runStartDate": "2019-01-01T00:00:00Z",
     "runEndDate": "2019-06-01T00:00:00Z",
     "compiler": "intel",
@@ -30,7 +29,6 @@
     "createdBy": "Alice Smith",
     "lastEditedBy": "Alice Smith",
     "extra": {
-      "variables": ["tas", "pr", "rsds"],
       "annotations": ["piControl baseline"]
     },
     "artifacts": [
@@ -78,7 +76,6 @@
     },
     "simulationStartDate": "1850-01-01T00:00:00Z",
     "simulationEndDate": "2014-12-31T00:00:00Z",
-    "totalYears": 165,
     "runStartDate": "2020-01-01T00:00:00Z",
     "compiler": "gnu",
     "notesMarkdown": "E3SM historical simulation for CMIP6 experiments.",
@@ -88,7 +85,6 @@
     "createdBy": "Bob Lee",
     "lastEditedBy": "Bob Lee",
     "extra": {
-      "variables": ["tas", "pr", "rsdt", "rlut"],
       "annotations": ["historical CMIP6 run"]
     },
     "artifacts": [
@@ -136,7 +132,6 @@
     },
     "simulationStartDate": "2015-01-01T00:00:00Z",
     "simulationEndDate": "2100-12-31T00:00:00Z",
-    "totalYears": 85,
     "compiler": "intel",
     "notesMarkdown": "High-emissions scenario (SSP5-8.5) projection using E3SM v3.0.0.",
     "knownIssues": "Pending ocean coupling validation.",
@@ -145,7 +140,6 @@
     "createdBy": "Carol Nguyen",
     "lastEditedBy": "Carol Nguyen",
     "extra": {
-      "variables": ["tas", "tos", "co2mass"],
       "annotations": ["future scenario"]
     },
     "artifacts": [
@@ -190,7 +184,6 @@
     "lastEditedBy": "David Kim",
     "lastEditedAt": "2024-08-11T12:00:00Z",
     "extra": {
-      "variables": ["tas", "pr", "rsut", "rlut"],
       "annotations": ["atmosphere-only run"]
     },
     "machine": {
@@ -235,7 +228,6 @@
     "lastEditedBy": "Ethan Zhao",
     "lastEditedAt": "2024-09-11T12:00:00Z",
     "extra": {
-      "variables": ["tas", "ua", "va", "zg"],
       "annotations": ["GPU tuning"]
     },
     "machine": {
@@ -276,7 +268,6 @@
     "uploadedBy": "Fiona Li",
     "uploadDate": "2024-10-01T00:00:00Z",
     "extra": {
-      "variables": ["gpp", "lai"],
       "annotations": ["land-only test"]
     },
     "machine": {
@@ -317,7 +308,6 @@
     "uploadedBy": "Grace Park",
     "uploadDate": "2024-10-10T00:00:00Z",
     "extra": {
-      "variables": ["tas", "ps"],
       "annotations": ["debug run"]
     },
     "machine": {
@@ -357,7 +347,6 @@
     "uploadedBy": "Hannah Zhao",
     "uploadDate": "2024-11-01T00:00:00Z",
     "extra": {
-      "variables": ["tos", "uo", "vo"],
       "annotations": ["ocean test"]
     },
     "machine": {

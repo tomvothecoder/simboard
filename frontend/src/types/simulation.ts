@@ -34,7 +34,6 @@ export interface SimulationCreate {
   machineId: string; // UUID
   simulationStartDate: string; // ISO datetime
   simulationEndDate?: string | null;
-  totalYears?: number | null;
   runStartDate?: string | null;
   runEndDate?: string | null;
   compiler?: string | null;
@@ -96,7 +95,6 @@ export interface SimulationOut {
   machineId: string; // UUID
   simulationStartDate: string; // ISO datetime
   simulationEndDate?: string | null;
-  totalYears?: number | null;
   runStartDate?: string | null;
   runEndDate?: string | null;
   compiler?: string | null;

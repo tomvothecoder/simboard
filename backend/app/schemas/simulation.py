@@ -35,7 +35,6 @@ class SimulationCreate(CamelInModel):
     machine_id: UUID
     simulation_start_date: datetime
     simulation_end_date: datetime | None = None
-    total_years: float | None = None
     run_start_date: datetime | None = None
     run_end_date: datetime | None = None
     compiler: str | None = None
