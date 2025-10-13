@@ -14,8 +14,17 @@ const App = () => {
   const queryClient = useMemo(() => new QueryClient(), []);
 
   // Fetch simulations data using custom hook.
-  const simulations = useSimulations();
-  const machines = useMachines()
+  const rawSimulations = useSimulations();
+  const machines = useMachines();
+
+  const simulations = useMemo(() => {
+    if (!rawSimulations.data || !machines.data) return [];
+
+    return rawSimulations.data.map((simulation) => ({
+      ...simulation,
+      machine: machines.data.find((machine) => machine.id === simulation.machineId),
+    }));
+  }, [rawSimulations.data, machines.data]);
 
   const [selectedSimulationIds, setSelectedSimulationIds] = useState<string[]>(() => {
     const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -23,8 +32,8 @@ const App = () => {
   });
 
   const selectedSimulations = useMemo(
-    () => (simulations.data ?? []).filter((item) => selectedSimulationIds.includes(item.id)),
-    [simulations.data, selectedSimulationIds],
+    () => (simulations ?? []).filter((item) => selectedSimulationIds.includes(item.id)),
+    [simulations, selectedSimulationIds],
   );
   // -------------------- Effects --------------------
   useEffect(() => {
@@ -37,7 +46,8 @@ const App = () => {
       <BrowserRouter>
         <NavBar selectedSimulationIds={selectedSimulationIds} />
         <AppRoutes
-          simulations={simulations.data}
+          // FIXME: Fix type annotations for AppRoutes
+          simulations={simulations}
           machines={machines.data}
           selectedSimulationIds={selectedSimulationIds}
           setSelectedSimulationIds={setSelectedSimulationIds}

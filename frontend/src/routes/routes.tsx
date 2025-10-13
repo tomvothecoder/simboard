@@ -1,7 +1,6 @@
-import { RouteObject, useLocation, useParams, useRoutes } from 'react-router-dom';
+import { RouteObject, useParams, useRoutes } from 'react-router-dom';
 
-import { Button } from '@/components/ui/button';
-import { useSimulation } from '@/hooks/useSimulation';
+import { useSimulation } from '@/api/simulation';
 import Browse from '@/pages/Browse/Browse';
 import Compare from '@/pages/Compare/Compare';
 import Docs from '@/pages/Docs/Docs';
@@ -20,29 +19,16 @@ interface RoutesProps {
 }
 
 const SimulationDetailsRoute = () => {
-  const { id = '' } = useParams();
-  const location = useLocation() as { state?: { seed?: Simulation } };
-  const seed = location.state?.seed;
-  const { data, isLoading, error, refetch } = useSimulation(id, seed);
+  const { id } = useParams<{ id: string }>();
 
-  if (isLoading) {
-    return <div className="p-8 text-sm text-muted-foreground">Loading simulation…</div>;
-  }
-  if (error || !data) {
-    return (
-      <div className="p-8 space-y-3">
-        <div className="text-base font-semibold">Simulation not found</div>
-        <div className="text-sm text-muted-foreground">
-          We couldn&apos;t load the simulation with id: <code>{id}</code>.
-        </div>
-        <Button size="sm" onClick={() => refetch()}>
-          Retry
-        </Button>
-      </div>
-    );
-  }
+  const { data: simulation, loading, error } = useSimulation(id || '');
 
-  return <SimulationDetails simulation={data} canEdit={false} />;
+  if (!id) return <div className="p-8">Invalid simulation ID</div>;
+  if (loading) return <div className="p-8">Loading simulation details...</div>;
+  if (error) return <div className="p-8 text-red-600">Error: {error}</div>;
+  if (!simulation) return <div className="p-8">Simulation not found</div>;
+
+  return <SimulationDetails simulation={simulation} />;
 };
 
 const createRoutes = ({
@@ -65,7 +51,6 @@ const createRoutes = ({
       ),
     },
     { path: '/simulations', element: <SimulationsCatalog simulations={simulations} /> },
-    // Details page now fetches by :id (no need to pass list)
     { path: '/simulations/:id', element: <SimulationDetailsRoute /> },
     {
       path: '/compare',

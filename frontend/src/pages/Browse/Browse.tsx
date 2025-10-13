@@ -14,7 +14,6 @@ export interface FilterState {
   // Scientific Goal
   campaignId: string[];
   experimentTypeId: string[];
-  variables: string[];
 
   // Simulation Context
   machineId: string[];
@@ -27,10 +26,6 @@ export interface FilterState {
   status: string[];
   modelStartDate: string;
   modelEndDate: string;
-
-  // Metadata
-  uploadStartDate: string; // ISO Date
-  uploadEndDate: string; // ISO Date
 }
 
 interface BrowseProps {
@@ -51,7 +46,6 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
   const [appliedFilters, setAppliedFilters] = useState<FilterState>({
     campaignId: [],
     experimentTypeId: [],
-    variables: [],
     machineId: [],
     compset: [],
     gridName: [],
@@ -60,8 +54,6 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
     status: [],
     modelStartDate: '',
     modelEndDate: '',
-    uploadStartDate: '',
-    uploadEndDate: '',
   });
 
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
@@ -87,7 +79,6 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
     const initial: FilterState = {
       campaignId: [],
       experimentTypeId: [],
-      variables: [],
       machineId: [],
       compset: [],
       gridName: [],
@@ -96,8 +87,6 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
       status: [],
       modelStartDate: '',
       modelEndDate: '',
-      uploadStartDate: '',
-      uploadEndDate: '',
     };
 
     for (const sim of simulations) {
@@ -107,7 +96,6 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
       const keys = [
         'campaignId',
         'experimentTypeId',
-        'variables',
         'compset',
         'gridName',
         'simulationType',
@@ -138,8 +126,6 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
   const filteredData = useMemo(() => {
     const startModel = parseDate(appliedFilters.modelStartDate);
     const endModel = parseDate(appliedFilters.modelEndDate);
-    const startUpload = parseDate(appliedFilters.uploadStartDate);
-    const endUpload = parseDate(appliedFilters.uploadEndDate);
 
     const arrayFilterGetters: Record<
       keyof FilterState,
@@ -148,7 +134,6 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
       machineId: (rec) => simMachineId(rec) ?? '',
       campaignId: (rec) => rec.campaignId ?? [],
       experimentTypeId: (rec) => rec.experimentTypeId ?? [],
-      variables: (rec) => rec.variables ?? [],
       compset: (rec) => rec.compset ?? [],
       gridName: (rec) => rec.gridName ?? [],
       simulationType: (rec) => rec.simulationType ?? [],
@@ -156,8 +141,6 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
       status: (rec) => rec.status ?? [],
       modelStartDate: () => undefined,
       modelEndDate: () => undefined,
-      uploadStartDate: () => undefined,
-      uploadEndDate: () => undefined,
     };
 
     return simulations.filter((record) => {
@@ -172,16 +155,11 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
       }
 
       if (startModel || endModel) {
-        const recStart = parseDate((record as Simulation).modelStartDate);
-        const recEnd = parseDate((record as Simulation).modelEndDate);
+        const recStart = parseDate((record as Simulation).simulationStartDate);
+        const recEnd = parseDate((record as Simulation).simulationEndDate ?? undefined);
+
         if (startModel && recStart && recStart < startModel) return false;
         if (endModel && recEnd && recEnd > endModel) return false;
-      }
-
-      if (startUpload || endUpload) {
-        const recUpload = parseDate((record as Simulation).uploadDate);
-        if (startUpload && recUpload && recUpload < startUpload) return false;
-        if (endUpload && recUpload && recUpload > endUpload) return false;
       }
 
       return true;
@@ -195,7 +173,6 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
     const arrayKeys: (keyof FilterState)[] = [
       'campaignId',
       'experimentTypeId',
-      'variables',
       'machineId',
       'compset',
       'gridName',
@@ -236,7 +213,6 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
     setAppliedFilters({
       campaignId: [],
       experimentTypeId: [],
-      variables: [],
       machineId: [],
       compset: [],
       gridName: [],
@@ -245,8 +221,6 @@ const Browse = ({ simulations, selectedSimulationIds, setSelectedSimulationIds }
       status: [],
       modelStartDate: '',
       modelEndDate: '',
-      uploadStartDate: '',
-      uploadEndDate: '',
     });
   };
 
