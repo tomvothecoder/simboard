@@ -53,7 +53,7 @@ export interface SimulationCreate {
   // Provenance & submission
   // ~~~~~~~~~~~~~~~~~~~~~~~
   createdBy?: string | null;
-  lastEditedBy?: string | null;
+  lastUpdatedBy?: string | null;
 
   // Miscellaneous
   // ~~~~~~~~~~~~~~~~~
@@ -115,7 +115,7 @@ export interface SimulationOut {
   // Provenance & submission
   // ~~~~~~~~~~~~~~~~~~~~~~~
   createdBy?: string | null;
-  lastEditedBy?: string | null;
+  lastUpdatedBy?: string | null;
 
   createdAt: string; // Server-managed field
   updatedAt: string; // Server-managed field

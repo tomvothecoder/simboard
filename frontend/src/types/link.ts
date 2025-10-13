@@ -1,7 +1,6 @@
-1
-export type ExternalLinkType =
-  | "diagnosticLinks"
-  | "paceLinks"
+export type ExternalLinkKind =
+  | "diagnostic"
+  | "performance"
   | "docs"
   | "other";
 
@@ -9,13 +8,13 @@ export type ExternalLinkType =
  * Represents a link to an external diagnostic, documentation, or related resource.
  */
 export interface ExternalLinkIn {
-  linkType: ExternalLinkType;
+  kind: ExternalLinkKind;
   url: string;
   label?: string | null;
 }
 
 export interface ExternalLinkOut extends ExternalLinkIn {
-  id: string;
-  createdAt: string;
-  updatedAt: string;
+  id: string; // UUID
+  createdAt: string; // ISO datetime
+  updatedAt: string; // ISO datetime
 }

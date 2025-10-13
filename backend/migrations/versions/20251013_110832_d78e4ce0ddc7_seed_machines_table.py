@@ -1,8 +1,8 @@
 """Seed machines table
 
-Revision ID: 3549db208f70
-Revises: d666c49ea3bd
-Create Date: 2025-10-07 10:27:05.406374
+Revision ID: d78e4ce0ddc7
+Revises: 6bf905412036
+Create Date: 2025-10-13 11:08:32.816288
 
 """
 
@@ -14,8 +14,8 @@ import sqlalchemy.dialects.postgresql as pg
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "3549db208f70"
-down_revision: Union[str, Sequence[str], None] = "d666c49ea3bd"
+revision: str = "d78e4ce0ddc7"
+down_revision: Union[str, Sequence[str], None] = "6bf905412036"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

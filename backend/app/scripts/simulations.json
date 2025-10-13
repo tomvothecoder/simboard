@@ -29,28 +29,28 @@
     "branch": "main",
     "externalRepoUrl": "https://github.com/E3SM-Project/E3SM",
     "createdBy": "Alice Smith",
-    "lastEditedBy": "Alice Smith",
+    "lastUpdatedBy": "Alice Smith",
     "extra": {},
     "artifacts": [
       {
-        "kind": "outputPath",
+        "kind": "output",
         "uri": "https://data.llnl.gov/e3sm/piControl/output",
         "label": "Main output directory"
       },
       {
-        "kind": "archivePath",
+        "kind": "archive",
         "uri": "https://data.llnl.gov/e3sm/piControl/archive",
         "label": "Archived simulation outputs"
       }
     ],
     "links": [
       {
-        "linkType": "diagnosticLinks",
+        "kind": "diagnostic",
         "url": "https://e3sm.org/diagnostics/piControl",
         "label": "Diagnostics Dashboard"
       },
       {
-        "linkType": "docs",
+        "kind": "docs",
         "url": "https://e3sm.org/docs/piControl-setup",
         "label": "Experiment Documentation"
       }
@@ -85,28 +85,28 @@
     "branch": "release-v2",
     "externalRepoUrl": "https://github.com/E3SM-Project/E3SM",
     "createdBy": "Bob Lee",
-    "lastEditedBy": "Bob Lee",
+    "lastUpdatedBy": "Bob Lee",
     "extra": {},
     "artifacts": [
       {
-        "kind": "outputPath",
+        "kind": "output",
         "uri": "https://data.llnl.gov/e3sm/historical/output",
         "label": "Output files"
       },
       {
-        "kind": "archivePath",
+        "kind": "archive",
         "uri": "https://data.llnl.gov/e3sm/historical/archive",
         "label": "Archived data"
       }
     ],
     "links": [
       {
-        "linkType": "diagnosticLinks",
+        "kind": "diagnostic",
         "url": "https://e3sm.org/diagnostics/historical",
         "label": "Diagnostics"
       },
       {
-        "linkType": "paceLinks",
+        "kind": "performance",
         "url": "https://pace.llnl.gov/e3sm/historical",
         "label": "PACE Results"
       }
@@ -140,18 +140,18 @@
     "branch": "main",
     "externalRepoUrl": "https://github.com/E3SM-Project/E3SM",
     "createdBy": "Carol Nguyen",
-    "lastEditedBy": "Carol Nguyen",
+    "lastUpdatedBy": "Carol Nguyen",
     "extra": {},
     "artifacts": [
       {
-        "kind": "outputPath",
+        "kind": "output",
         "uri": "https://data.llnl.gov/e3sm/ssp585/output",
         "label": "SSP585 outputs"
       }
     ],
     "links": [
       {
-        "linkType": "docs",
+        "kind": "docs",
         "url": "https://e3sm.org/docs/ssp585-setup",
         "label": "Experiment Documentation"
       }
@@ -185,18 +185,18 @@
     "branch": "main",
     "externalRepoUrl": "https://github.com/E3SM-Project/E3SM",
     "createdBy": "David Kim",
-    "lastEditedBy": "David Kim",
+    "lastUpdatedBy": "David Kim",
     "extra": {},
     "artifacts": [
       {
-        "kind": "outputPath",
+        "kind": "output",
         "uri": "https://data.llnl.gov/e3sm/amip/output",
         "label": "AMIP outputs"
       }
     ],
     "links": [
       {
-        "linkType": "docs",
+        "kind": "docs",
         "url": "https://e3sm.org/docs/amip-setup",
         "label": "Experiment Documentation"
       }
@@ -230,18 +230,18 @@
     "branch": "release-v2",
     "externalRepoUrl": "https://github.com/E3SM-Project/E3SM",
     "createdBy": "Eve Johnson",
-    "lastEditedBy": "Eve Johnson",
+    "lastUpdatedBy": "Eve Johnson",
     "extra": {},
     "artifacts": [
       {
-        "kind": "outputPath",
+        "kind": "output",
         "uri": "https://data.llnl.gov/e3sm/rcp45/output",
         "label": "RCP4.5 outputs"
       }
     ],
     "links": [
       {
-        "linkType": "docs",
+        "kind": "docs",
         "url": "https://e3sm.org/docs/rcp45-setup",
         "label": "Experiment Documentation"
       }
@@ -275,18 +275,18 @@
     "branch": "main",
     "externalRepoUrl": "https://github.com/E3SM-Project/E3SM",
     "createdBy": "Frank White",
-    "lastEditedBy": "Frank White",
+    "lastUpdatedBy": "Frank White",
     "extra": {},
     "artifacts": [
       {
-        "kind": "outputPath",
+        "kind": "output",
         "uri": "https://data.llnl.gov/e3sm/piclim/output",
         "label": "piClim outputs"
       }
     ],
     "links": [
       {
-        "linkType": "docs",
+        "kind": "docs",
         "url": "https://e3sm.org/docs/piclim-setup",
         "label": "Experiment Documentation"
       }
@@ -320,18 +320,18 @@
     "branch": "main",
     "externalRepoUrl": "https://github.com/E3SM-Project/E3SM",
     "createdBy": "Grace Lee",
-    "lastEditedBy": "Grace Lee",
+    "lastUpdatedBy": "Grace Lee",
     "extra": {},
     "artifacts": [
       {
-        "kind": "outputPath",
+        "kind": "output",
         "uri": "https://data.llnl.gov/e3sm/ssp126/output",
         "label": "SSP126 outputs"
       }
     ],
     "links": [
       {
-        "linkType": "docs",
+        "kind": "docs",
         "url": "https://e3sm.org/docs/ssp126-setup",
         "label": "Experiment Documentation"
       }
@@ -365,18 +365,18 @@
     "branch": "main",
     "externalRepoUrl": "https://github.com/E3SM-Project/E3SM",
     "createdBy": "Henry Adams",
-    "lastEditedBy": "Henry Adams",
+    "lastUpdatedBy": "Henry Adams",
     "extra": {},
     "artifacts": [
       {
-        "kind": "outputPath",
+        "kind": "output",
         "uri": "https://data.llnl.gov/e3sm/highres/output",
         "label": "HighRes outputs"
       }
     ],
     "links": [
       {
-        "linkType": "docs",
+        "kind": "docs",
         "url": "https://e3sm.org/docs/highres-setup",
         "label": "Experiment Documentation"
       }

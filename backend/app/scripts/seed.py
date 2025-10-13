@@ -98,7 +98,11 @@ def seed_from_json(db: Session, json_path: str):
             db.add(Artifact(simulation_id=sim.id, **a.model_dump()))
 
         for link in sim_in.links or []:
-            db.add(ExternalLink(simulation_id=sim.id, **link.model_dump()))
+            db.add(
+                ExternalLink(
+                    simulation_id=sim.id, **{**link.model_dump(), "url": str(link.url)}
+                )
+            )
 
     db.commit()
     print(f"✅ Done! Inserted {len(data)} simulations with artifacts and links.")

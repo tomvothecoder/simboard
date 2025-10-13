@@ -1,8 +1,8 @@
 """Seed status lookup table
 
-Revision ID: d666c49ea3bd
-Revises: 708f26079ad0
-Create Date: 2025-10-07 10:26:37.112566
+Revision ID: 6bf905412036
+Revises: 7fea50e608c8
+Create Date: 2025-10-13 11:07:59.351019
 
 """
 
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "d666c49ea3bd"
-down_revision: Union[str, Sequence[str], None] = "708f26079ad0"
+revision: str = "6bf905412036"
+down_revision: Union[str, Sequence[str], None] = "7fea50e608c8"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

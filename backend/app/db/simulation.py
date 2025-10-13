@@ -36,6 +36,7 @@ class Simulation(Base, IDMixin, TimestampMixin):
 
     # Model setup/context
     # ~~~~~~~~~~~~~~~~~~~
+    # TODO: Make simulation_type an Enum once we have a fixed set of types.
     simulation_type: Mapped[str] = mapped_column(String(50))
     status: Mapped[str] = mapped_column(
         String(50), ForeignKey("status_lookup.code"), index=True
@@ -72,7 +73,7 @@ class Simulation(Base, IDMixin, TimestampMixin):
     # Provenance & submission
     # ~~~~~~~~~~~~~~~~~~~~~~~
     created_by: Mapped[str | None] = mapped_column(String(100))
-    last_edited_by: Mapped[str | None] = mapped_column(String(100))
+    last_updated_by: Mapped[str | None] = mapped_column(String(100))
 
     # Miscellaneous
     # ~~~~~~~~~~~~~~~~~
