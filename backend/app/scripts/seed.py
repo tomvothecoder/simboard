@@ -21,8 +21,8 @@ from app.db.link import ExternalLink
 from app.db.machine import Machine
 from app.db.session import SessionLocal
 from app.db.simulation import Simulation
-from app.schemas.artifact import ArtifactIn
-from app.schemas.link import ExternalLinkIn
+from app.schemas.artifact import ArtifactCreate
+from app.schemas.link import ExternaLinkCreate
 from app.schemas.simulation import SimulationCreate
 
 # --------------------------------------------------------------------
@@ -82,9 +82,10 @@ def seed_from_json(db: Session, json_path: str):
                 "runEndDate": _parse_datetime(entry.get("runEndDate")),
                 "uploadDate": _parse_datetime(entry.get("uploadDate")),
                 "artifacts": [
-                    ArtifactIn(**artifact) for artifact in entry.get("artifacts", [])
+                    ArtifactCreate(**artifact)
+                    for artifact in entry.get("artifacts", [])
                 ],
-                "links": [ExternalLinkIn(**link) for link in entry.get("links", [])],
+                "links": [ExternaLinkCreate(**link) for link in entry.get("links", [])],
             }
         )
 

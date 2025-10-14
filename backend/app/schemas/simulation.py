@@ -3,24 +3,18 @@ from uuid import UUID
 
 from pydantic import Field
 
-from app.schemas.artifact import ArtifactIn, ArtifactOut
-from app.schemas.base import CamelInModel, CamelOutModel
-from app.schemas.link import ExternalLinkIn, ExternalLinkOut
+from app.schemas.artifact import ArtifactCreate, ArtifactOut
+from app.schemas.base import CamelInBaseModel, CamelOutBaseModel
+from app.schemas.link import ExternaLinkCreate, ExternalLinkOut
 
 
-class SimulationCreate(CamelInModel):
+class SimulationCreate(CamelInBaseModel):
     # Configuration
     # ~~~~~~~~~~~~~~
     name: str = Field(..., description="Name of the simulation")
     case_name: str = Field(..., description="Case name associated with the simulation")
     description: str | None = Field(
         None, description="Optional description of the simulation"
-    )
-    version_tag: str | None = Field(
-        None, description="Optional version tag for the simulation"
-    )
-    git_hash: str | None = Field(
-        None, description="Git hash associated with the simulation"
     )
     compset: str = Field(..., description="Component set used in the simulation")
     compset_alias: str = Field(..., description="Alias for the component set")
@@ -29,7 +23,7 @@ class SimulationCreate(CamelInModel):
         ..., description="Grid resolution used in the simulation"
     )
     parent_simulation_id: UUID | None = Field(
-        None, description="ID of the parent simulation, if any"
+        None, description="Optional ID of the parent simulation"
     )
 
     # Model setup/context
@@ -38,16 +32,16 @@ class SimulationCreate(CamelInModel):
     simulation_type: str = Field(..., description="Type of the simulation")
     status: str = Field(..., description="Current status of the simulation")
     campaign_id: str | None = Field(
-        None, description="ID of the associated campaign, if any"
+        None, description="Optional ID of the associated campaign"
     )
     experiment_type_id: str | None = Field(
-        None, description="ID of the experiment type, if any"
+        None, description="Optional ID of the experiment type"
     )
     initialization_type: str = Field(
         ..., description="Initialization type for the simulation"
     )
     group_name: str | None = Field(
-        None, description="Group name associated with the simulation, if any"
+        None, description="Optional group name associated with the simulation"
     )
 
     # Model timeline
@@ -59,81 +53,74 @@ class SimulationCreate(CamelInModel):
         ..., description="Start date of the simulation"
     )
     simulation_end_date: datetime | None = Field(
-        None, description="End date of the simulation, if any"
+        None, description="Optional end date of the simulation"
     )
     run_start_date: datetime | None = Field(
-        None, description="Start date of the simulation run, if any"
+        None, description="Optional start date of the simulation run"
     )
     run_end_date: datetime | None = Field(
-        None, description="End date of the simulation run, if any"
+        None, description="Optional end date of the simulation run"
     )
     compiler: str | None = Field(
-        None, description="Compiler used for the simulation, if any"
+        None, description="Optional compiler used for the simulation"
     )
 
     # Metadata & audit
     # ~~~~~~~~~~~~~~~~~
     key_features: str | None = Field(
-        None, description="Key features of the simulation, if any"
+        None, description="Optional key features of the simulation"
     )
     known_issues: str | None = Field(
-        None, description="Known issues with the simulation, if any"
+        None, description="Optional known issues with the simulation"
     )
     notes_markdown: str | None = Field(
-        None, description="Additional notes in markdown format, if any"
+        None, description="Optional additional notes in markdown format"
     )
 
     # Version control
     # ~~~~~~~~~~~~~~~
-    branch: str | None = Field(
-        None, description="Branch name associated with the simulation, if any"
+    git_repository_url: str | None = Field(
+        None, description="Optional Git repository URL"
     )
-    external_repo_url: str | None = Field(
-        None, description="URL of the external repository, if any"
+    git_branch: str | None = Field(
+        None, description="Optional Git branch name associated with the simulation"
+    )
+    git_tag: str | None = Field(None, description="Optional Git tag for the simulation")
+    git_commit_hash: str | None = Field(
+        None, description="Optional Git commit hash associated with the simulation"
     )
 
     # Provenance & submission
     # ~~~~~~~~~~~~~~~~~~~~~~~
     created_by: str | None = Field(
-        None, description="User who created the simulation, if any"
+        None, description="User who created the simulation, defined at creation time."
     )
     last_updated_by: str | None = Field(
-        None, description="User who last updated the simulation, if any"
-    )
-
-    # Miscellaneous
-    # ~~~~~~~~~~~~~~~~~
-    extra: dict = Field(
-        default_factory=dict,
-        description="Extra metadata in flexible dictionary/JSON format",
+        None,
+        description="User who last updated the simulation, defined at update time.",
     )
 
     # Relationships
     # ~~~~~~~~~~~~~~
-    artifacts: list[ArtifactIn] = Field(
+    artifacts: list[ArtifactCreate] = Field(
         default_factory=list,
-        description="List of artifacts associated with the simulation",
+        description="Optional list of artifacts associated with the simulation",
     )
-    links: list[ExternalLinkIn] = Field(
+    links: list[ExternaLinkCreate] = Field(
         default_factory=list,
-        description="List of external links associated with the simulation",
+        description="Optional list of external links associated with the simulation",
     )
 
 
-class SimulationOut(CamelOutModel):
+class SimulationOut(CamelOutBaseModel):
+    id: UUID = Field(..., description="The unique identifier of the simulation.")
+
     # Configuration
     # ~~~~~~~~~~~~~~
-    id: UUID = Field(..., description="Unique identifier for the simulation")
     name: str = Field(..., description="Name of the simulation")
     case_name: str = Field(..., description="Case name associated with the simulation")
     description: str | None = Field(
         None, description="Optional description of the simulation"
-    )
-    version_tag: str | None = Field(
-        None, description="Optional version tag for the simulation"
-    )
-    git_hash: str | None = Field(
-        None, description="Git hash associated with the simulation"
     )
     compset: str = Field(..., description="Component set used in the simulation")
     compset_alias: str = Field(..., description="Alias for the component set")
@@ -142,7 +129,7 @@ class SimulationOut(CamelOutModel):
         ..., description="Grid resolution used in the simulation"
     )
     parent_simulation_id: UUID | None = Field(
-        None, description="ID of the parent simulation, if any"
+        None, description="Optional ID of the parent simulation"
     )
 
     # Model setup/context
@@ -151,16 +138,16 @@ class SimulationOut(CamelOutModel):
     simulation_type: str = Field(..., description="Type of the simulation")
     status: str = Field(..., description="Current status of the simulation")
     campaign_id: str | None = Field(
-        None, description="ID of the associated campaign, if any"
+        None, description="Optional ID of the associated campaign"
     )
     experiment_type_id: str | None = Field(
-        None, description="ID of the experiment type, if any"
+        None, description="Optional ID of the experiment type"
     )
     initialization_type: str = Field(
         ..., description="Initialization type for the simulation"
     )
     group_name: str | None = Field(
-        None, description="Group name associated with the simulation, if any"
+        None, description="Optional group name associated with the simulation"
     )
 
     # Model timeline
@@ -172,69 +159,75 @@ class SimulationOut(CamelOutModel):
         ..., description="Start date of the simulation"
     )
     simulation_end_date: datetime | None = Field(
-        None, description="End date of the simulation, if any"
+        None, description="Optional end date of the simulation"
     )
-    total_years: float | None = Field(None, description="Total years simulated, if any")
     run_start_date: datetime | None = Field(
-        None, description="Start date of the simulation run, if any"
+        None, description="Optional start date of the simulation run"
     )
     run_end_date: datetime | None = Field(
-        None, description="End date of the simulation run, if any"
+        None, description="Optional end date of the simulation run"
     )
     compiler: str | None = Field(
-        None, description="Compiler used for the simulation, if any"
+        None, description="Optional compiler used for the simulation"
     )
 
     # Metadata & audit
     # ~~~~~~~~~~~~~~~~~
     key_features: str | None = Field(
-        None, description="Key features of the simulation, if any"
+        None, description="Optional key features of the simulation"
     )
     known_issues: str | None = Field(
-        None, description="Known issues with the simulation, if any"
+        None, description="Optional known issues with the simulation"
     )
     notes_markdown: str | None = Field(
-        None, description="Additional notes in markdown format, if any"
+        None, description="Optional additional notes in markdown format"
     )
 
     # Version control
     # ~~~~~~~~~~~~~~~
-    branch: str | None = Field(
-        None, description="Branch name associated with the simulation, if any"
+    git_repository_url: str | None = Field(
+        None, description="Optional Git repository URL"
     )
-    external_repo_url: str | None = Field(
-        None, description="URL of the external repository, if any"
+    git_branch: str | None = Field(
+        None, description="Optional Git branch name associated with the simulation"
+    )
+    git_tag: str | None = Field(None, description="Optional Git tag for the simulation")
+    git_commit_hash: str | None = Field(
+        None, description="Optional Git commit hash associated with the simulation"
     )
 
     # Provenance & submission
     # ~~~~~~~~~~~~~~~~~~~~~~~
+    created_by: str | None = Field(
+        None, description="User who created the simulation, defined at creation time."
+    )
+    last_updated_by: str | None = Field(
+        None,
+        description="User who last updated the simulation, defined at update time.",
+    )
+
     created_at: datetime = Field(
         ..., description="Timestamp when the simulation was created"
     )
-    created_by: str | None = Field(
-        None, description="User who created the simulation, if any"
-    )
+
     updated_at: datetime = Field(
         ..., description="Timestamp when the simulation was last updated"
-    )
-    last_updated_by: str | None = Field(
-        None, description="User who last updated the simulation, if any"
     )
 
     # Miscellaneous
     # ~~~~~~~~~~~~~~~~~
     extra: dict = Field(
         default_factory=dict,
-        description="Extra metadata in flexible dictionary/JSON format",
+        description="Optional extra metadata in flexible dictionary/JSON format",
     )
 
     # Relationships
     # ~~~~~~~~~~~~~~
     artifacts: list[ArtifactOut] = Field(
         default_factory=list,
-        description="List of artifacts associated with the simulation",
+        description="Optional list of artifacts associated with the simulation",
     )
     links: list[ExternalLinkOut] = Field(
         default_factory=list,
-        description="List of external links associated with the simulation",
+        description="Optional list of external links associated with the simulation",
     )

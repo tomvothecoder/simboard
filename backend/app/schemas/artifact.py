@@ -4,23 +4,25 @@ from uuid import UUID
 
 from pydantic import Field
 
-from app.schemas.base import CamelInModel, CamelOutModel
+from app.schemas.base import CamelInBaseModel, CamelOutBaseModel
 
 
 class Kind(str, Enum):
+    """Enumeration of possible artifact types."""
+
     OUTPUT = "output"
     ARCHIVE = "archive"
     RUN_SCRIPT = "run_script"
     POSTPROCESS_SCRIPT = "postprocessing_script"
 
 
-class ArtifactIn(CamelInModel):
+class ArtifactCreate(CamelInBaseModel):
     kind: Kind = Field(..., description="The type of the artifact.")
     uri: str = Field(..., description="The URI where the artifact is located.")
     label: str | None = Field(None, description="An optional label for the artifact.")
 
 
-class ArtifactOut(CamelOutModel):
+class ArtifactOut(CamelOutBaseModel):
     id: UUID = Field(..., description="The unique identifier of the artifact.")
 
     kind: Kind = Field(..., description="The type of the artifact.")

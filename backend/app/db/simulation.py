@@ -24,8 +24,6 @@ class Simulation(Base, IDMixin, TimestampMixin):
     name: Mapped[str] = mapped_column(String(200), index=True, unique=True)
     case_name: Mapped[str] = mapped_column(String(200), index=True, unique=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    version_tag: Mapped[str | None] = mapped_column(String(100))
-    git_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     compset: Mapped[str] = mapped_column(String(120))
     compset_alias: Mapped[str] = mapped_column(String(120))
     grid_name: Mapped[str] = mapped_column(String(200))
@@ -67,8 +65,10 @@ class Simulation(Base, IDMixin, TimestampMixin):
 
     # Version control
     # ~~~~~~~~~~~~~~~
-    branch: Mapped[str | None] = mapped_column(String(200))
-    external_repo_url: Mapped[str | None] = mapped_column(String(500))
+    git_repository_url: Mapped[str | None] = mapped_column(String(500))
+    git_branch: Mapped[str | None] = mapped_column(String(200))
+    git_tag: Mapped[str | None] = mapped_column(String(100))
+    git_commit_hash: Mapped[str | None] = mapped_column(String(64), index=True)
 
     # Provenance & submission
     # ~~~~~~~~~~~~~~~~~~~~~~~
@@ -95,5 +95,5 @@ class Simulation(Base, IDMixin, TimestampMixin):
     # Constraints
     # ~~~~~~~~~~~
     __table_args__ = (
-        UniqueConstraint("name", "version_tag", name="uq_simulation_name_version"),
+        UniqueConstraint("name", "git_tag", name="uq_simulation_name_tag"),
     )

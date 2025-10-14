@@ -13,8 +13,6 @@ export interface SimulationCreate {
   name: string;
   caseName: string;
   description: string | null;
-  versionTag?: string | null;
-  gitHash?: string | null;
   compset: string;
   compsetAlias: string;
   gridName: string;
@@ -47,8 +45,10 @@ export interface SimulationCreate {
 
   // Version control
   // ~~~~~~~~~~~~~~~
-  branch?: string | null;
-  externalRepoUrl?: string | null;
+  gitRepoUrl?: string | null;
+  gitBranch?: string | null;
+  gitTag?: string | null;
+  gitCommitHash?: string | null;
 
   // Provenance & submission
   // ~~~~~~~~~~~~~~~~~~~~~~~
@@ -76,8 +76,6 @@ export interface SimulationOut {
   name: string;
   caseName: string;
   description: string | null;
-  versionTag?: string | null;
-  gitHash?: string | null;
   compset: string;
   compsetAlias: string;
   gridName: string;
@@ -109,8 +107,10 @@ export interface SimulationOut {
 
   // Version control
   // ~~~~~~~~~~~~~~~
+  repoUrl?: string | null;
   branch?: string | null;
-  externalRepoUrl?: string | null;
+  versionTag?: string | null;
+  commitHash?: string | null;
 
   // Provenance & submission
   // ~~~~~~~~~~~~~~~~~~~~~~~

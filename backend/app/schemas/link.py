@@ -4,17 +4,19 @@ from uuid import UUID
 
 from pydantic import Field, HttpUrl
 
-from app.schemas.base import CamelInModel, CamelOutModel
+from app.schemas.base import CamelInBaseModel, CamelOutBaseModel
 
 
 class Kind(str, Enum):
+    """Enumeration of possible external link types."""
+
     DIAGNOSTIC = "diagnostic"
     PERFORMANCE = "performance"
     DOCS = "docs"
     OTHER = "other"
 
 
-class ExternalLinkIn(CamelInModel):
+class ExternaLinkCreate(CamelInBaseModel):
     kind: Kind = Field(..., description="The type of the external link.")
     url: HttpUrl = Field(..., description="The URL of the external link.")
     label: str | None = Field(
@@ -22,7 +24,7 @@ class ExternalLinkIn(CamelInModel):
     )
 
 
-class ExternalLinkOut(CamelOutModel):
+class ExternalLinkOut(CamelOutBaseModel):
     id: UUID = Field(..., description="The unique identifier of the external link.")
 
     kind: Kind = Field(..., description="The type of the external link.")
