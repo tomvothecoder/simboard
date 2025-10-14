@@ -38,14 +38,18 @@ def create_simulation(payload: SimulationCreate, db: Session = Depends(get_db)):
     )
 
     if payload.artifacts:
-        sim.artifacts = [
-            Artifact(**artifact.model_dump(by_alias=False))
-            for artifact in payload.artifacts
-        ]
+        for artifact in payload.artifacts:
+            artifact_data = artifact.model_dump(by_alias=False, exclude_unset=True)
+            artifact_data["uri"] = str(artifact.uri)
+
+            sim.artifacts.append(Artifact(**artifact_data))
+
     if payload.links:
-        sim.links = [
-            ExternalLink(**link.model_dump(by_alias=False)) for link in payload.links
-        ]
+        for link in payload.links:
+            link_data = link.model_dump(by_alias=False, exclude_unset=True)
+            link_data["url"] = str(link.url)
+
+            sim.links.append(ExternalLink(**link_data))
 
     # Start a database transaction to ensure atomicity of the operation
     with transaction(db):

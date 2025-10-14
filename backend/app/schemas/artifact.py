@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import AnyUrl, Field
 
 from app.schemas.base import CamelInBaseModel, CamelOutBaseModel
 
@@ -18,7 +18,7 @@ class Kind(str, Enum):
 
 class ArtifactCreate(CamelInBaseModel):
     kind: Kind = Field(..., description="The type of the artifact.")
-    uri: str = Field(..., description="The URI where the artifact is located.")
+    uri: AnyUrl = Field(..., description="The URI where the artifact is located.")
     label: str | None = Field(None, description="An optional label for the artifact.")
 
 
@@ -26,7 +26,7 @@ class ArtifactOut(CamelOutBaseModel):
     id: UUID = Field(..., description="The unique identifier of the artifact.")
 
     kind: Kind = Field(..., description="The type of the artifact.")
-    uri: str = Field(..., description="The URI where the artifact is located.")
+    uri: AnyUrl = Field(..., description="The URI where the artifact is located.")
     label: str | None = Field(None, description="An optional label for the artifact.")
 
     created_at: datetime = Field(

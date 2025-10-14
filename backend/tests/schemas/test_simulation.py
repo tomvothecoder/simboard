@@ -1,6 +1,8 @@
 from datetime import datetime
 from uuid import uuid4
 
+from pydantic import AnyUrl, HttpUrl
+
 from app.schemas.simulation import SimulationCreate, SimulationOut
 from app.schemas.utils import to_snake_case
 
@@ -18,7 +20,7 @@ class TestSimulationCreate:
             "simulationType": "control",
             "status": "new",
             "machineId": uuid4(),
-            "modelStartDate": datetime(2023, 1, 1, 0, 0, 0),
+            "simulationStartDate": datetime(2023, 1, 1, 0, 0, 0),
         }
 
         simulation_create = SimulationCreate(**payload)  # type: ignore
@@ -38,39 +40,34 @@ class TestSimulationCreate:
             "simulationType": "control",
             "status": "new",
             "machineId": uuid4(),
-            "modelStartDate": datetime(2023, 1, 1, 0, 0, 0),
-            "versionTag": "v1.0",
-            "gitHash": "abc123",
+            "simulationStartDate": datetime(2023, 1, 1, 0, 0, 0),
+            "gitTag": "v1.0",
+            "gitCommitHash": "abc123",
             "parentSimulationId": uuid4(),
             "campaignId": "campaign1",
             "experimentTypeId": "exp1",
             "groupName": "group1",
             "simulationEndDate": datetime(2023, 12, 31, 0, 0, 0),
-            "totalYears": 1.0,
             "runStartDate": datetime(2023, 1, 1, 0, 0, 0),
             "runEndDate": datetime(2023, 12, 31, 0, 0, 0),
             "compiler": "gcc",
             "notesMarkdown": "Some notes",
             "knownIssues": "No known issues",
-            "branch": "main",
-            "externalRepoUrl": "http://example.com/repo",
-            "uploadedBy": "user1",
-            "uploadDate": datetime(2023, 1, 1, 0, 0, 0),
-            "lastModified": datetime(2023, 1, 2, 0, 0, 0),
-            "lastEditedBy": "user2",
-            "lastEditedAt": datetime(2023, 1, 2, 0, 0, 0),
+            "gitBranch": "main",
+            "gitRepositoryUrl": HttpUrl("http://example.com/repo"),
+            "createdBy": "user1",
             "extra": {"key": "value"},
             "artifacts": [
                 {
-                    "kind": "outputPath",
-                    "uri": "http://example.com/artifact1",
+                    "kind": "output",
+                    "uri": AnyUrl("http://example.com/artifact1"),
                     "label": "artifact1",
                 }
             ],
             "links": [
                 {
-                    "link_type": "diagnosticLinks",
-                    "url": "http://example.com/link1",
+                    "kind": "diagnostic",
+                    "url": HttpUrl("http://example.com/link1"),
                     "label": "link1",
                 }
             ],
@@ -107,7 +104,7 @@ class TestSimulationOut:
             "simulation_type": "control",
             "status": "new",
             "machine_id": uuid4(),
-            "model_start_date": datetime(2023, 1, 1, 0, 0, 0),
+            "simulation_start_date": datetime(2023, 1, 1, 0, 0, 0),
             "created_at": datetime(2023, 1, 1, 0, 0, 0),
             "updated_at": datetime(2023, 1, 2, 0, 0, 0),
         }
@@ -123,26 +120,22 @@ class TestSimulationOut:
 
         # Assert: Validate optional fields are set to their defaults
         optional_fields = [
-            "version_tag",
-            "git_hash",
             "parent_simulation_id",
             "campaign_id",
             "experiment_type_id",
             "group_name",
             "simulation_end_date",
-            "total_years",
             "run_start_date",
             "run_end_date",
             "compiler",
             "notes_markdown",
             "known_issues",
-            "branch",
-            "external_repo_url",
-            "uploaded_by",
-            "upload_date",
-            "last_modified",
-            "last_edited_by",
-            "last_edited_at",
+            "git_repository_url",
+            "git_branch",
+            "git_tag",
+            "git_commit_hash",
+            "created_by",
+            "last_updated_by",
         ]
         for field in optional_fields:
             assert getattr(simulation_out, field) is None, (
@@ -170,37 +163,34 @@ class TestSimulationOut:
             "simulation_type": "control",
             "status": "new",
             "machine_id": uuid4(),
-            "model_start_date": datetime(2023, 1, 1, 0, 0, 0),
+            "simulation_start_date": datetime(2023, 1, 1, 0, 0, 0),
             "created_at": datetime(2023, 1, 1, 0, 0, 0),
             "updated_at": datetime(2023, 1, 2, 0, 0, 0),
         }
 
         optional_fields = {
-            "version_tag": "v1.0",
-            "git_hash": "abc123",
             "parent_simulation_id": uuid4(),
             "campaign_id": "campaign1",
             "experiment_type_id": "exp1",
             "group_name": "group1",
             "simulation_end_date": datetime(2023, 12, 31, 0, 0, 0),
-            "total_years": 1.0,
             "run_start_date": datetime(2023, 1, 1, 0, 0, 0),
             "run_end_date": datetime(2023, 12, 31, 0, 0, 0),
             "compiler": "gcc",
             "notes_markdown": "Some notes",
             "known_issues": "No known issues",
-            "branch": "main",
-            "external_repo_url": "http://example.com/repo",
-            "uploaded_by": "user1",
-            "upload_date": datetime(2023, 1, 1, 0, 0, 0),
-            "last_modified": datetime(2023, 1, 2, 0, 0, 0),
-            "last_edited_by": "user2",
-            "last_edited_at": datetime(2023, 1, 2, 0, 0, 0),
+            "git_repository_url": HttpUrl("http://example.com/repo"),
+            "git_branch": "main",
+            "git_tag": "v1.0",
+            "git_commit_hash": "abc123",
+            "created_by": "user1",
+            "created_at": datetime(2023, 1, 1, 0, 0, 0),
+            "last_updated_by": "user2",
             "extra": {"key": "value"},
             "artifacts": [
                 {
-                    "kind": "outputPath",
-                    "uri": "http://example.com/artifact1",
+                    "kind": "output",
+                    "uri": AnyUrl("http://example.com/artifact1"),
                     "label": "artifact1",
                     "id": uuid4(),
                     "created_at": datetime(2023, 1, 1, 0, 0, 0),
@@ -209,8 +199,8 @@ class TestSimulationOut:
             ],
             "links": [
                 {
-                    "link_type": "diagnosticLinks",
-                    "url": "http://example.com/link1",
+                    "kind": "diagnostic",
+                    "url": HttpUrl("http://example.com/link1"),
                     "label": "link1",
                     "id": uuid4(),
                     "created_at": datetime(2023, 1, 1, 0, 0, 0),

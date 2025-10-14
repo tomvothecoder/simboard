@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, HttpUrl
 
 from app.schemas.artifact import ArtifactCreate, ArtifactOut
 from app.schemas.base import CamelInBaseModel, CamelOutBaseModel
@@ -79,7 +79,7 @@ class SimulationCreate(CamelInBaseModel):
 
     # Version control
     # ~~~~~~~~~~~~~~~
-    git_repository_url: str | None = Field(
+    git_repository_url: HttpUrl | None = Field(
         None, description="Optional Git repository URL"
     )
     git_branch: str | None = Field(
@@ -98,6 +98,13 @@ class SimulationCreate(CamelInBaseModel):
     last_updated_by: str | None = Field(
         None,
         description="User who last updated the simulation, defined at update time.",
+    )
+
+    # Miscellaneous
+    # ~~~~~~~~~~~~~~~~~
+    extra: dict = Field(
+        default_factory=dict,
+        description="Optional extra metadata in flexible dictionary/JSON format",
     )
 
     # Relationships
@@ -185,7 +192,7 @@ class SimulationOut(CamelOutBaseModel):
 
     # Version control
     # ~~~~~~~~~~~~~~~
-    git_repository_url: str | None = Field(
+    git_repository_url: HttpUrl | None = Field(
         None, description="Optional Git repository URL"
     )
     git_branch: str | None = Field(
@@ -198,20 +205,19 @@ class SimulationOut(CamelOutBaseModel):
 
     # Provenance & submission
     # ~~~~~~~~~~~~~~~~~~~~~~~
-    created_by: str | None = Field(
-        None, description="User who created the simulation, defined at creation time."
-    )
-    last_updated_by: str | None = Field(
-        None,
-        description="User who last updated the simulation, defined at update time.",
-    )
-
     created_at: datetime = Field(
         ..., description="Timestamp when the simulation was created"
+    )
+    created_by: str | None = Field(
+        None, description="User who created the simulation, defined at creation time."
     )
 
     updated_at: datetime = Field(
         ..., description="Timestamp when the simulation was last updated"
+    )
+    last_updated_by: str | None = Field(
+        None,
+        description="User who last updated the simulation, defined at update time.",
     )
 
     # Miscellaneous

@@ -80,7 +80,7 @@ def seed_from_json(db: Session, json_path: str):
                 "simulationEndDate": _parse_datetime(entry.get("simulationEndDate")),
                 "runStartDate": _parse_datetime(entry.get("runStartDate")),
                 "runEndDate": _parse_datetime(entry.get("runEndDate")),
-                "uploadDate": _parse_datetime(entry.get("uploadDate")),
+                "createdAt": _parse_datetime(entry.get("createdAt")),
                 "artifacts": [
                     ArtifactCreate(**artifact)
                     for artifact in entry.get("artifacts", [])
