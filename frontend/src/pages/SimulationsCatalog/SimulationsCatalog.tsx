@@ -85,6 +85,7 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
     { id: 'createdAt', desc: true },
     { id: 'name', desc: false },
   ]);
+  const [viewMode, setViewMode] = useState<'simple' | 'advanced'>('simple');
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const navigate = useNavigate();
 
@@ -158,28 +159,6 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
           <span title={row.original.machine?.name ?? '—'}>{row.original.machine?.name ?? '—'}</span>
         ),
         size: 140,
-      },
-      {
-        id: 'diagnostics',
-        header: 'Diagnostics',
-        accessorFn: (r) => ({
-          diag: r.diagnosticLinks?.length ?? 0,
-          pace: r.paceLinks?.length ?? 0,
-        }),
-        cell: ({ getValue }) => {
-          const v = getValue() as { diag: number; pace: number };
-          return (
-            <div className="flex items-center gap-2">
-              <span title="Diagnostic links" className="inline-flex items-center gap-1">
-                📊 {v.diag}
-              </span>
-              <span title="PACE links" className="inline-flex items-center gap-1">
-                ⚡ {v.pace}
-              </span>
-            </div>
-          );
-        },
-        size: 150,
       },
       {
         accessorKey: 'createdAt',
@@ -322,31 +301,33 @@ const SimulationsCatalog = ({ simulations }: SimulationsCatalogProps) => {
           </DropdownMenu>
           <span className="text-muted-foreground hidden sm:inline">View:</span>
           <Button
-            variant="secondary"
+            variant={viewMode === 'simple' ? 'default' : 'secondary'}
             size="sm"
-            onClick={() =>
+            onClick={() => {
+              setViewMode('simple');
               setColumnVisibility({
                 gitCommitHash: false,
                 branch: false,
                 runDate: false,
                 lastEditedAt: false,
-              })
-            }
+              });
+            }}
             title="Hide advanced columns (Git, Branch, Run Date, Edited)"
           >
             Simple
           </Button>
           <Button
-            variant="secondary"
+            variant={viewMode === 'advanced' ? 'default' : 'secondary'}
             size="sm"
-            onClick={() =>
+            onClick={() => {
+              setViewMode('advanced');
               setColumnVisibility({
                 gitCommitHash: true,
                 branch: true,
                 runDate: true,
                 lastEditedAt: true,
-              })
-            }
+              });
+            }}
             title="Show advanced columns (Git, Branch, Run Date, Edited)"
           >
             Advanced
