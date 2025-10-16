@@ -45,7 +45,7 @@ export interface SimulationCreate {
 
   // Version control
   // ~~~~~~~~~~~~~~~
-  gitRepoUrl?: string | null;
+  gitRepositoryUrl?: string | null;
   gitBranch?: string | null;
   gitTag?: string | null;
   gitCommitHash?: string | null;
@@ -63,6 +63,13 @@ export interface SimulationCreate {
   // ~~~~~~~~~~~~~~
   artifacts: ArtifactIn[];
   links: ExternalLinkIn[];
+}
+// Extends SimulationCreate with optional fields for file paths.
+export interface SimulationCreateForm extends SimulationCreate {
+  outputPath?: string | null;
+  archivePaths?: string[] | null;
+  runScriptPaths?: string[] | null;
+  postprocessingScriptPath?: string[] | null;
 }
 
 /**

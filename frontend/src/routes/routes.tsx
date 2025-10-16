@@ -83,7 +83,7 @@ const createRoutes = ({
         />
       ),
     },
-    { path: '/upload', element: <Upload /> },
+    { path: '/upload', element: <Upload machines={machines} /> },
     { path: '/docs', element: <Docs /> },
     { path: '*', element: <div className="p-8">404 - Page not found</div> },
   ];

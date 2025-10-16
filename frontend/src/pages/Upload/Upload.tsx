@@ -3,9 +3,15 @@ import { useMemo, useState } from 'react';
 import FormSection from '@/pages/Upload/FormSection';
 import FormTokenInput from '@/pages/Upload/FormTokenInput';
 import StickyActionsBar from '@/pages/Upload/StickyActionsBar';
-import { SimulationCreate } from '@/types';
+import { Machine, SimulationCreate, SimulationCreateForm } from '@/types';
+import { ArtifactIn } from '@/types/artifact';
+import { ExternalLinkIn } from '@/types/link';
 
 // -------------------- Types & Interfaces --------------------
+interface UploadProps {
+  machines: Machine[];
+}
+
 type OpenKey =
   | 'configuration'
   | 'modelSetup'
@@ -16,69 +22,69 @@ type OpenKey =
   | null;
 
 // -------------------- Pure Helpers --------------------
-/**
- * Counts the number of valid (non-null and non-undefined) fields in an array.
- *
- * @param fields - An array of fields that can be strings, null, or undefined.
- * @returns The count of valid fields in the array.
- */
 const countValidfields = (fields: (string | null | undefined)[]) =>
   fields.reduce((count, field) => (field ? count + 1 : count), 0);
 
-// The number of required fields per section to track progress.
 const REQUIRED_FIELDS = {
   config: 4,
   model: 2,
   version: 2,
-  paths: 2,
+  paths: 1,
 };
 
-const initialState: SimulationCreate = {
-  // Required fields
+// -------------------- Initial Form State --------------------
+const initialState: SimulationCreateForm = {
   name: '',
   caseName: '',
+  description: null,
   compset: '',
   compsetAlias: '',
   gridName: '',
   gridResolution: '',
-  initializationType: '',
+  parentSimulationId: null,
+
   simulationType: 'production',
   status: 'not-started',
-  machineId: '',
-  simulationStartDate: '',
-
-  // Optional fields
-  gitTag: null,
-  gitCommitHash: null,
-  parentSimulationId: null,
   campaignId: null,
   experimentTypeId: null,
+  initializationType: '',
   groupName: null,
+
+  machineId: '',
+  simulationStartDate: '',
   simulationEndDate: null,
-  totalYears: null,
   runStartDate: null,
   runEndDate: null,
   compiler: null,
-  notesMarkdown: null,
+
+  keyFeatures: null,
   knownIssues: null,
+  notesMarkdown: null,
+
+  gitRepositoryUrl: null,
   gitBranch: null,
-  gitRepoUrl: null,
+  gitTag: null,
+  gitCommitHash: null,
+
   createdBy: null,
-  createdAt: null,
-  lastModified: null,
-  lastEditedBy: null,
-  lastEditedAt: null,
+  lastUpdatedBy: null,
+
   extra: {},
 
-  // Relationships
-  artifacts: null,
-  links: null,
+  artifacts: [],
+  links: [],
+
+  // --- UI-only fields ---
+  outputPath: '',
+  archivePaths: [],
+  runScriptPaths: [],
+  postprocessingScriptPath: [],
 };
 
-const Upload = () => {
-  // -------------------- Local State --------------------
+// -------------------- Component --------------------
+const Upload = ({ machines }: UploadProps) => {
   const [open, setOpen] = useState<OpenKey>('configuration');
-  const [form, setForm] = useState<SimulationCreate>(initialState);
+  const [form, setForm] = useState<SimulationCreateForm>(initialState);
 
   const [variables, setVariables] = useState<string[]>([]);
   const [tags, setTags] = useState<string[]>([]);
@@ -109,12 +115,9 @@ const Upload = () => {
   }, [form.gitBranch, form.gitCommitHash]);
 
   const pathsSat = useMemo(() => {
-    const fields = [
-      form.outputPath,
-      Array.isArray(form.runScriptPaths) && form.runScriptPaths.length ? 'valid' : null,
-    ];
+    const fields = [form.outputPath];
     return countValidfields(fields);
-  }, [form.outputPath, form.runScriptPaths]);
+  }, [form.outputPath]);
 
   const allValid = useMemo(() => {
     return (
@@ -123,6 +126,43 @@ const Upload = () => {
       versionSat >= REQUIRED_FIELDS.version
     );
   }, [configSat, modelSat, versionSat]);
+
+  // -------------------- Builders --------------------
+  const buildArtifacts = (form: any): ArtifactIn[] => {
+    const artifacts: ArtifactIn[] = [];
+
+    if (form.outputPath) artifacts.push({ kind: 'output', path: form.outputPath });
+
+    if (form.archivePaths?.length)
+      form.archivePaths.forEach((p: string) => artifacts.push({ kind: 'archive', path: p }));
+
+    if (form.runScriptPaths?.length)
+      form.runScriptPaths.forEach((p: string) => artifacts.push({ kind: 'runScript', path: p }));
+
+    if (form.batchLogPaths?.length)
+      form.batchLogPaths.forEach((p: string) => artifacts.push({ kind: 'batchLog', path: p }));
+
+    if (form.postprocessingScriptPath?.length)
+      form.postprocessingScriptPath.forEach((p: string) =>
+        artifacts.push({ kind: 'postprocessinScript', path: p }),
+      );
+
+    return artifacts;
+  };
+
+  const buildLinks = (
+    diagLinks: { label: string; url: string }[],
+    paceLinks: { label: string; url: string }[],
+  ): ExternalLinkIn[] => {
+    const links: ExternalLinkIn[] = [];
+    diagLinks.forEach((l) =>
+      links.push({ kind: 'diagnostic', url: l.url, label: l.label || null }),
+    );
+    paceLinks.forEach((l) =>
+      links.push({ kind: 'performance', url: l.url, label: l.label || null }),
+    );
+    return links;
+  };
 
   // -------------------- Handlers --------------------
   const handleChange = (
@@ -139,7 +179,6 @@ const Upload = () => {
     const next = diagLinks.slice();
     next[i][field] = v;
     setDiagLinks(next);
-    setForm((p) => ({ ...p, diagnosticLinks: next }));
   };
 
   const addPace = () => setPaceLinks([...paceLinks, { label: '', url: '' }]);
@@ -147,17 +186,20 @@ const Upload = () => {
     const next = paceLinks.slice();
     next[i][field] = v;
     setPaceLinks(next);
-    setForm((p) => ({ ...p, paceLinks: next }));
   };
 
-  const handleBatchLogPathsChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setForm((p) => ({
-      ...p,
-      batchLogPaths: e.target.value
-        .split('\n')
-        .map((s) => s.trim())
-        .filter(Boolean),
-    }));
+  const handleSubmit = async () => {
+    const artifacts = buildArtifacts(form);
+    const links = buildLinks(diagLinks, paceLinks);
+
+    const payload: SimulationCreate = {
+      ...form,
+      artifacts,
+      links,
+    };
+
+    console.log('Submitting simulation:', payload);
+    // await api.post("/simulations", payload);
   };
 
   // -------------------- Render --------------------
@@ -274,15 +316,21 @@ const Upload = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label className="text-sm font-medium">
-                Machine ID <span className="text-red-500">*</span>
+                Machine <span className="text-red-500">*</span>
               </label>
-              <input
+              <select
                 className="mt-1 w-full h-10 rounded-md border px-3"
                 name="machineId"
                 value={form.machineId}
                 onChange={handleChange}
-                placeholder="e.g., cori, perlmutter, lassen"
-              />
+              >
+                <option value="">Select a machine</option>
+                {machines.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="text-sm font-medium">
@@ -344,7 +392,7 @@ const Upload = () => {
             </div>
             <div>
               <label className="text-sm font-medium">
-                Git Hash <span className="text-red-500">*</span>
+                Commit Hash <span className="text-red-500">*</span>
               </label>
               <input
                 className="mt-1 w-full h-10 rounded-md border px-3"
@@ -355,24 +403,24 @@ const Upload = () => {
               />
             </div>
             <div>
-              <label className="text-sm font-medium">Branch Time</label>
+              <label className="text-sm font-medium">Tag</label>
               <input
-                type="datetime-local"
                 className="mt-1 w-full h-10 rounded-md border px-3"
-                name="branchTime"
-                value={(form.branchTime as string) ?? ''}
+                name="gitTag"
+                value={form.gitTag ?? ''}
                 onChange={handleChange}
+                placeholder="e.g., a1b2c3d"
               />
             </div>
-            <div className="md:col-span-2">
+            <div>
               <label className="text-sm font-medium">
-                External Repo URL{' '}
+                Repository URL{' '}
                 <span className="text-xs text-muted-foreground ml-1">(optional)</span>
               </label>
               <input
                 className="mt-1 w-full h-10 rounded-md border px-3"
                 name="gitRepositoryUrl"
-                value={form.gitRepoUrl ?? ''}
+                value={form.gitRepositoryUrl ?? ''}
                 onChange={handleChange}
                 placeholder="https://github.com/org/repo"
               />
@@ -400,9 +448,7 @@ const Upload = () => {
               />
             </div>
             <div>
-              <label className="text-sm font-medium">
-                Archive Paths (comma-separated) <span className="text-red-500">*</span>
-              </label>
+              <label className="text-sm font-medium">Archive Paths (comma-separated)</label>
               <input
                 className="mt-1 w-full h-10 rounded-md border px-3"
                 name="archivePaths"
@@ -420,9 +466,7 @@ const Upload = () => {
               />
             </div>
             <div>
-              <label className="text-sm font-medium">
-                Run Script Paths (comma-separated) <span className="text-red-500">*</span>
-              </label>
+              <label className="text-sm font-medium">Run Script Paths (comma-separated)</label>
               <input
                 className="mt-1 w-full h-10 rounded-md border px-3"
                 name="runScriptPaths"
@@ -458,20 +502,6 @@ const Upload = () => {
                   }))
                 }
                 placeholder="/home/user/post.sh"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="text-sm font-medium">
-                Batch Log Paths
-                <span className="text-xs text-muted-foreground ml-1">(optional, one per line)</span>
-              </label>
-              <textarea
-                className="mt-1 w-full rounded-md border px-3 py-2"
-                name="batchLogPaths"
-                value={form.batchLogPaths?.join('\n') ?? ''}
-                onChange={handleBatchLogPathsChange}
-                rows={2}
-                placeholder="/autolog/sim/run-19345.log"
               />
             </div>
           </div>
@@ -558,20 +588,6 @@ const Upload = () => {
                 rows={2}
               />
             </div>
-
-            <div>
-              <label className="text-sm font-medium">
-                Annotations (JSON/text){' '}
-                <span className="text-xs text-muted-foreground ml-1">(optional)</span>
-              </label>
-              <textarea
-                className="mt-1 w-full rounded-md border px-3 py-2"
-                name="annotations"
-                value={form.annotations ?? ''}
-                onChange={handleChange}
-                rows={2}
-              />
-            </div>
           </div>
         </FormSection>
         <FormSection
@@ -602,6 +618,7 @@ const Upload = () => {
                 </div>
               </div>
               <div className="space-y-1">
+                {/* TODO Valid options from machines state. */}
                 <div>
                   <strong>Machine ID:</strong> {form.machineId || '—'}
                 </div>
@@ -618,7 +635,7 @@ const Upload = () => {
                   <strong>Git Hash:</strong> {form.gitCommitHash || '—'}
                 </div>
                 <div>
-                  <strong>External Repo:</strong> {form.gitRepoUrl || '—'}
+                  <strong>External Repo:</strong> {form.gitRepositoryUrl || '—'}
                 </div>
               </div>
             </div>
@@ -681,7 +698,10 @@ const Upload = () => {
           disabled={!allValid}
           onSaveDraft={() => console.log('Save draft', formWithVars, { tags })}
           onNext={() => {
-            if (!allValid) return window.scrollTo({ top: 0, behavior: 'smooth' });
+            if (!allValid) {
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+              return;
+            }
             setOpen('review');
             window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
           }}
