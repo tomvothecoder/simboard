@@ -3,6 +3,8 @@ from uuid import uuid4
 
 from pydantic import AnyUrl, HttpUrl
 
+from app.schemas.artifact import ArtifactKind, ArtifactOut
+from app.schemas.link import ExternalLinkKind, ExternalLinkOut
 from app.schemas.machine import MachineOut
 from app.schemas.simulation import SimulationCreate, SimulationOut
 from app.schemas.utils import to_snake_case
@@ -246,3 +248,117 @@ class TestSimulationOut:
                         )
             else:
                 assert getattr(simulation_out, key) == value
+
+    def test_grouped_artifacts_computed_field(self):
+        simulation_out = SimulationOut(
+            id=uuid4(),
+            name="Test Simulation",
+            case_name="test_case",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_type="control",
+            status="new",
+            machine_id=uuid4(),
+            simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
+            created_at=datetime(2023, 1, 1, 0, 0, 0),
+            updated_at=datetime(2023, 1, 2, 0, 0, 0),
+            machine=MachineOut(
+                id=uuid4(),
+                name="Machine A",
+                site="Data Center 1",
+                architecture="x86_64",
+                scheduler="SLURM",
+                gpu=True,
+                notes="High-performance computing machine",
+                created_at=datetime(2023, 1, 1, 0, 0, 0),
+                updated_at=datetime(2023, 1, 2, 0, 0, 0),
+            ),
+            artifacts=[
+                ArtifactOut(
+                    kind=ArtifactKind.OUTPUT,
+                    uri=AnyUrl("http://example.com/artifact1"),
+                    label="artifact1",
+                    id=uuid4(),
+                    created_at=datetime(2023, 1, 1, 0, 0, 0),
+                    updated_at=datetime(2023, 1, 2, 0, 0, 0),
+                ),
+                ArtifactOut(
+                    kind=ArtifactKind.ARCHIVE,
+                    uri=AnyUrl("http://example.com/artifact2"),
+                    label="artifact2",
+                    id=uuid4(),
+                    created_at=datetime(2023, 1, 1, 0, 0, 0),
+                    updated_at=datetime(2023, 1, 2, 0, 0, 0),
+                ),
+                ArtifactOut(
+                    kind=ArtifactKind.OUTPUT,
+                    uri=AnyUrl("http://example.com/artifact3"),
+                    label="artifact3",
+                    id=uuid4(),
+                    created_at=datetime(2023, 1, 1, 0, 0, 0),
+                    updated_at=datetime(2023, 1, 2, 0, 0, 0),
+                ),
+            ],
+        )  # type: ignore
+
+        grouped = simulation_out.grouped_artifacts
+        assert len(grouped()) == 2, "There should be 2 groups of artifacts."
+        assert len(grouped()["output"]) == 2, "There should be 2 output artifacts."
+        assert len(grouped()["archive"]) == 1, "There should be 1 archive artifact."
+
+    def test_grouped_links_computed_field(self):
+        simulation_out = SimulationOut(
+            id=uuid4(),
+            name="Test Simulation",
+            case_name="test_case",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            initialization_type="startup",
+            simulation_type="control",
+            status="new",
+            machine_id=uuid4(),
+            simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
+            created_at=datetime(2023, 1, 1, 0, 0, 0),
+            updated_at=datetime(2023, 1, 2, 0, 0, 0),
+            machine=MachineOut(
+                id=uuid4(),
+                name="Machine A",
+                site="Data Center 1",
+                architecture="x86_64",
+                scheduler="SLURM",
+                gpu=True,
+                notes="High-performance computing machine",
+                created_at=datetime(2023, 1, 1, 0, 0, 0),
+                updated_at=datetime(2023, 1, 2, 0, 0, 0),
+            ),
+            links=[
+                ExternalLinkOut(
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url=HttpUrl("http://example.com/link1"),
+                    label="link1",
+                    id=uuid4(),
+                    created_at=datetime(2023, 1, 1, 0, 0, 0),
+                    updated_at=datetime(2023, 1, 2, 0, 0, 0),
+                ),
+                ExternalLinkOut(
+                    kind=ExternalLinkKind.PERFORMANCE,
+                    url=HttpUrl("http://example.com/link2"),
+                    label="link2",
+                    id=uuid4(),
+                    created_at=datetime(2023, 1, 1, 0, 0, 0),
+                    updated_at=datetime(2023, 1, 2, 0, 0, 0),
+                ),
+            ],
+        )  # type: ignore
+
+        grouped = simulation_out.grouped_links
+        assert len(grouped()) == 2, "There should be 2 groups of links."
+        assert len(grouped()["diagnostic"]) == 1, "There should be 2 output artifacts."
+        assert len(grouped()["performance"]) == 1, (
+            "There should be 1 performance artifact."
+        )

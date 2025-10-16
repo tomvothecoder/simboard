@@ -130,4 +130,9 @@ export interface SimulationOut {
   machine: Machine
   artifacts: ArtifactOut[];
   links: ExternalLinkOut[];
+
+  // Computed fields
+  // ~~~~~~~~~~~~~~~
+  groupedArtifacts: Record<string, ArtifactOut[]>;
+  groupedLinks: Record<string, ExternalLinkOut[]>;
 }

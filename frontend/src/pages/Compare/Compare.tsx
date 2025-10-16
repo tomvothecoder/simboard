@@ -6,7 +6,7 @@ import { AIFloatingButton } from '@/pages/Compare/AIFloatingButton';
 import CompareToolbar from '@/pages/Compare/CompareToolbar';
 import { norm, renderCellValue } from '@/pages/Compare/utils';
 import type { SimulationOut } from '@/types/index';
-import { formatDate, getSimulationDuration, groupFieldByKind } from '@/utils/utils';
+import { formatDate, getSimulationDuration } from '@/utils/utils';
 
 interface CompareProps {
   simulations: SimulationOut[];
@@ -80,9 +80,7 @@ const Compare = ({
       const sim = selectedSimulations.find((s) => s.id === id);
       if (!sim) return fallback;
 
-      const { artifacts, links } = groupFieldByKind(sim);
-
-      return artifacts[kind] ?? links[kind] ?? fallback;
+      return sim.groupedArtifacts[kind] ?? sim.groupedLinks[kind] ?? fallback;
     });
 
     return { label, values };

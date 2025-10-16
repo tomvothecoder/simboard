@@ -7,7 +7,7 @@ from pydantic import AnyUrl, Field
 from app.schemas.base import CamelInBaseModel, CamelOutBaseModel
 
 
-class Kind(str, Enum):
+class ArtifactKind(str, Enum):
     """Enumeration of possible artifact types."""
 
     OUTPUT = "output"
@@ -17,7 +17,7 @@ class Kind(str, Enum):
 
 
 class ArtifactCreate(CamelInBaseModel):
-    kind: Kind = Field(..., description="The type of the artifact.")
+    kind: ArtifactKind = Field(..., description="The type of the artifact.")
     uri: AnyUrl = Field(..., description="The URI where the artifact is located.")
     label: str | None = Field(None, description="An optional label for the artifact.")
 
@@ -25,7 +25,7 @@ class ArtifactCreate(CamelInBaseModel):
 class ArtifactOut(CamelOutBaseModel):
     id: UUID = Field(..., description="The unique identifier of the artifact.")
 
-    kind: Kind = Field(..., description="The type of the artifact.")
+    kind: ArtifactKind = Field(..., description="The type of the artifact.")
     uri: AnyUrl = Field(..., description="The URI where the artifact is located.")
     label: str | None = Field(None, description="An optional label for the artifact.")
 

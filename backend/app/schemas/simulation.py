@@ -1,7 +1,9 @@
+from collections import defaultdict
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
-from pydantic import Field, HttpUrl
+from pydantic import Field, HttpUrl, computed_field
 
 from app.schemas.artifact import ArtifactCreate, ArtifactOut
 from app.schemas.base import CamelInBaseModel, CamelOutBaseModel
@@ -241,3 +243,21 @@ class SimulationOut(CamelOutBaseModel):
         default_factory=list,
         description="Optional list of external links associated with the simulation",
     )
+
+    # Computed fields
+    # ~~~~~~~~~~~~~~~
+    @computed_field(return_type=dict[str, list[ArtifactOut]])
+    def grouped_artifacts(self) -> dict[str, list[ArtifactOut]]:
+        return self._group_by_kind(self.artifacts)
+
+    @computed_field(return_type=dict[str, list[ExternalLinkOut]])
+    def grouped_links(self) -> dict[str, list[ExternalLinkOut]]:
+        return self._group_by_kind(self.links)
+
+    def _group_by_kind(self, items: list[Any]) -> dict[str, list[Any]]:
+        grouped = defaultdict(list)
+
+        for item in items:
+            grouped[item.kind].append(item)
+
+        return dict(grouped)
