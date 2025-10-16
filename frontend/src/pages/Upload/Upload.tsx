@@ -78,7 +78,7 @@ const initialState: SimulationCreateForm = {
   outputPath: '',
   archivePaths: [],
   runScriptPaths: [],
-  postprocessingScriptPath: [],
+  postprocessingScriptPaths: [],
 };
 
 // -------------------- Component --------------------
@@ -139,7 +139,7 @@ const Upload = ({ machines }: UploadProps) => {
     if (form.runScriptPaths?.length)
       form.runScriptPaths.forEach((p: string) => artifacts.push({ kind: 'runScript', uri: p }));
 
-    if (form.postprocessingScriptPath?.length)
+    if (form.postprocessingScriptPaths?.length)
       form.postprocessingScriptPath.forEach((p: string) =>
         artifacts.push({ kind: 'postprocessingScript', uri: p }),
       );
@@ -484,17 +484,17 @@ const Upload = ({ machines }: UploadProps) => {
             </div>
             <div>
               <label className="text-sm font-medium">
-                Postprocessing Script Path
+                Postprocessing Script Paths (comma-separated)
                 <span className="text-xs text-muted-foreground ml-1">(optional)</span>
               </label>
               <input
                 className="mt-1 w-full h-10 rounded-md border px-3"
-                name="postprocessingScriptPath"
-                value={form.postprocessingScriptPath?.join?.(', ') ?? ''}
+                name="postprocessingScriptPaths"
+                value={form.postprocessingScriptPaths?.join?.(', ') ?? ''}
                 onChange={(e) =>
                   setForm((p) => ({
                     ...p,
-                    postprocessingScriptPath: e.target.value
+                    postprocessingScriptPaths: e.target.value
                       .split(',')
                       .map((s) => s.trim())
                       .filter(Boolean),

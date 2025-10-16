@@ -1,8 +1,8 @@
 export type ArtifactKind =
-  | "outputPath"
-  | "archivePath"
-  | "runScriptPath"
-  | "postprocessingScriptPath";
+  | "output"
+  | "archive"
+  | "runScript"
+  | "postprocessingScript";
 
 /**
  * Represents an artifact uploaded or linked to a simulation.

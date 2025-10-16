@@ -68,7 +68,7 @@ export interface SimulationCreateForm extends SimulationCreate {
   outputPath?: string | null;
   archivePaths?: string[] | null;
   runScriptPaths?: string[] | null;
-  postprocessingScriptPath?: string[] | null;
+  postprocessingScriptPaths?: string[] | null;
 }
 
 /**
