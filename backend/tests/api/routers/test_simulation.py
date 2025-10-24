@@ -7,11 +7,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.routers.simulation import (
-    create_simulation,
-    get_simulation,
-    list_simulations,
-)
+from app.api.simulation import create_simulation, get_simulation, list_simulations
 from app.db.models.machine import Machine
 from app.db.models.simulation import Simulation
 from app.schemas.simulation import SimulationCreate

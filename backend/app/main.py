@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routers import ai, machine, simulation
+from app.api import ai, machine, simulation
 from app.config import settings
 from app.exceptions import register_exception_handlers
 from app.logger import _setup_root_logger
