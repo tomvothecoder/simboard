@@ -29,13 +29,8 @@ auth_router.include_router(
 
 
 @auth_router.post("/logout", status_code=status.HTTP_200_OK)
-async def logout(response: JSONResponse):
-    """Log out the current user by clearing the authentication cookie.
-
-    Parameters
-    ----------
-        response (JSONResponse): The FastAPI JSON response object to modify.
-    """
+async def logout():
+    """Log out the current user by clearing the authentication cookie."""
     response = JSONResponse(
         content={"message": "Successfully logged out"},
         status_code=status.HTTP_200_OK,
