@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -24,6 +27,7 @@ interface NavBarProps {
 
 export default function Navbar({ selectedSimulationIds }: NavBarProps) {
   const location = useLocation();
+  const { user, isAuthenticated, loading, login, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -42,12 +46,14 @@ export default function Navbar({ selectedSimulationIds }: NavBarProps) {
     };
   }, [open]);
 
+  // Extract fallback initials
+  const initials = user?.email?.[0]?.toUpperCase() ?? '?';
+
   return (
     <header className="w-full px-6 py-4 bg-white border-b">
       <div className="mx-auto flex max-w-[1440px] items-center justify-between px-6 py-4">
         {/* Left: Logo + Nav Links */}
         <div className="flex items-center gap-6">
-          {/* Logo */}
           <Link to="/" className="text-xl font-bold flex items-center gap-2">
             <span className="text-muted-foreground">🔬🌍</span>
             SimBoard
@@ -106,54 +112,69 @@ export default function Navbar({ selectedSimulationIds }: NavBarProps) {
           </nav>
         </div>
 
-        {/* Right: User Avatar Dropdown */}
+        {/* Right: Auth-aware User Section */}
         <div className="relative" ref={dropdownRef}>
-          <button
-            className="flex items-center gap-2 focus:outline-none"
-            onClick={() => setOpen((v) => !v)}
-            aria-haspopup="true"
-            aria-expanded={open}
-          >
-            <Avatar>
-              <AvatarImage src="/avatars/jane.jpg" alt="Jane Doe" />
-              <AvatarFallback>JD</AvatarFallback>
-            </Avatar>
-            <span className="text-sm font-medium">Jane Doe</span>
-            <svg
-              className={`w-4 h-4 ml-1 transition-transform ${open ? 'rotate-180' : ''}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 9l-7 7-7-7"
-              />
-            </svg>
-          </button>
-          {open && (
-            <div className="absolute right-0 mt-2 w-40 bg-white border rounded shadow-lg z-50">
+          {/* Loading State */}
+          {loading && <Skeleton className="h-10 w-32 rounded-md" />}
+
+          {/* Unauthenticated: Show Login Button */}
+          {!loading && !isAuthenticated && (
+            <Button variant="default" onClick={login}>
+              Login with GitHub
+            </Button>
+          )}
+
+          {/* Authenticated User */}
+          {!loading && isAuthenticated && user && (
+            <>
               <button
-                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                onClick={() => {
-                  setOpen(false);
-                  // Placeholder: handle profile
-                }}
+                className="flex items-center gap-2 focus:outline-none"
+                onClick={() => setOpen((v) => !v)}
+                aria-haspopup="true"
+                aria-expanded={open}
               >
-                View Profile
+                <Avatar>
+                  <AvatarImage src={user.avatar_url} alt={user.full_name} />
+                  <AvatarFallback>{initials}</AvatarFallback>
+                </Avatar>
+                <span className="text-sm font-medium">{user.full_name}</span>
+                <svg
+                  className={`w-4 h-4 ml-1 transition-transform ${open ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
               </button>
-              <button
-                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                onClick={() => {
-                  setOpen(false);
-                  // Placeholder: handle logout
-                }}
-              >
-                Log Out
-              </button>
-            </div>
+
+              {open && (
+                <div className="absolute right-0 mt-2 w-40 bg-white border rounded shadow-lg z-50">
+                  <Link
+                    to="/profile"
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 block"
+                    onClick={() => setOpen(false)}
+                  >
+                    View Profile
+                  </Link>
+
+                  <button
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                    onClick={() => {
+                      setOpen(false);
+                      logout();
+                    }}
+                  >
+                    Log Out
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

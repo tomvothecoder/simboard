@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import axiosInstance from '@/api/axios';
+import api from '@/api/api';
 import type { Machine, SimulationOut } from '@/types';
 
 const SIMULATIONS_URL = '/simulations';
 
-export const fetchSimulations = async (
-  url: string = SIMULATIONS_URL
-): Promise<SimulationOut[]> => {
-  const res = await axiosInstance.get<SimulationOut[]>(url, {
+export const fetchSimulations = async (url: string = SIMULATIONS_URL): Promise<SimulationOut[]> => {
+  const res = await api.get<SimulationOut[]>(url, {
     headers: { 'Cache-Control': 'no-cache' },
   });
 
@@ -16,7 +14,7 @@ export const fetchSimulations = async (
 };
 
 export const fetchSimulationById = async (id: string): Promise<SimulationOut> => {
-  const res = await axiosInstance.get<SimulationOut>(`${SIMULATIONS_URL}/${id}`, {
+  const res = await api.get<SimulationOut>(`${SIMULATIONS_URL}/${id}`, {
     headers: { 'Cache-Control': 'no-cache' },
   });
 
@@ -93,21 +91,20 @@ export const useMachines = (url: string = '/machines') => {
     setLoading(true);
     setError(null);
 
-    axiosInstance.get<Machine[]>(url, {
-      headers: { 'Cache-Control': 'no-cache' },
-    })
+    api
+      .get<Machine[]>(url, {
+        headers: { 'Cache-Control': 'no-cache' },
+      })
       .then((res) => {
         if (!cancelled) setData(res.data);
       })
       .catch((e) => {
         if (!cancelled) setError(e.message);
-      }
-      )
+      })
 
       .finally(() => {
         if (!cancelled) setLoading(false);
-      }
-      );
+      });
 
     return () => {
       cancelled = true;
@@ -117,4 +114,4 @@ export const useMachines = (url: string = '/machines') => {
   const byId = useMemo(() => new Map(data.map((s) => [s.id, s])), [data]);
 
   return { data, loading, error, byId };
-}
+};

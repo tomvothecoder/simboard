@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     # Frontend
     # ----------------------------------------
-    frontend_origin: str = "http://localhost:5173"
+    frontend_origin: str = "http://127.0.0.1:5173"
 
     # Database configuration (must be supplied via .env)
     # --------------------------------------------------------
