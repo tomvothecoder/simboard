@@ -4,7 +4,7 @@
 # ============================================================
 
 # Variables
-APP_NAME=app/main.py
+APP_NAME=app.main
 HOST=127.0.0.1
 PORT=8000
 
@@ -39,16 +39,31 @@ clean:
 .PHONY: run reload
 
 run:
-	@echo "$(GREEN)Starting FastAPI server...$(NC)"
-	uv run fastapi run $(APP_NAME) --host $(HOST) --port $(PORT)
+	@echo "$(GREEN)Starting FastAPI server over HTTPS...$(NC)"
+	uv run uvicorn $(APP_NAME):app \
+		--host $(HOST) \
+		--port $(PORT) \
+		--ssl-keyfile ../certs/key.pem \
+		--ssl-certfile ../certs/cert.pem
 
 reload:
-	@echo "$(GREEN)Starting FastAPI server with auto-reload...$(NC)"
-	uv run fastapi run $(APP_NAME) --reload --host $(HOST) --port $(PORT)
+	@echo "$(GREEN)Starting FastAPI server with auto-reload over HTTPS...$(NC)"
+	uv run uvicorn $(APP_NAME):app \
+		--reload \
+		--host $(HOST) \
+		--port $(PORT) \
+		--ssl-keyfile ../certs/key.pem \
+		--ssl-certfile ../certs/cert.pem
 
 reload-debug:
-	@echo "$(GREEN)Starting FastAPI server with auto-reload and debug logging...$(NC)"
-	uv run fastapi run $(APP_NAME) --reload --host $(HOST) --port $(PORT) --log-level debug
+	@echo "$(GREEN)Starting FastAPI server with auto-reload and debug logging over HTTPS...$(NC)"
+	uv run uvicorn $(APP_NAME):app \
+		--reload \
+		--host $(HOST) \
+		--port $(PORT) \
+		--log-level debug \
+		--ssl-keyfile ../certs/key.pem \
+		--ssl-certfile ../certs/cert.pem
 
 # ============================================================
 #  Database Migrations (Alembic)

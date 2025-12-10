@@ -10,12 +10,14 @@ const AuthCallback: React.FC = () => {
   useEffect(() => {
     const completeLogin = async () => {
       try {
-        // ✅ Ask backend who we are; cookie already set by FastAPI
+        // NOTE: FastAPI Users backend has already processed the GitHub callback,
+        // which includes exchanging the code, creating the user, and setting
+        // the cookie.
         await refreshUser();
 
-        navigate(-1);
+        navigate('/', { replace: true });
       } catch (err) {
-        console.error('Failed to refresh user:', err);
+        console.error('OAuth post-login failed:', err);
         navigate('/login', { replace: true });
       }
     };
@@ -25,7 +27,7 @@ const AuthCallback: React.FC = () => {
 
   return (
     <div className="flex items-center justify-center h-screen">
-      <h1 className="text-xl font-semibold">Signing you in...</h1>
+      <h1 className="text-xl font-semibold">Signing you in…</h1>
     </div>
   );
 };

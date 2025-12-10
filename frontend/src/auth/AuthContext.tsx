@@ -37,8 +37,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const loginWithGithub = async () => {
-    const res = await fetch('https://localhost:8000/auth/github/authorize');
-    const { authorization_url } = await res.json();
+    const { data } = await api.get<{ authorization_url: string }>('/auth/github/authorize');
+    const { authorization_url } = data;
 
     // Redirect browser to GitHub
     window.location.href = authorization_url;

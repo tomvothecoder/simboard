@@ -103,8 +103,8 @@ make backend
 make frontend
 
 # 8. Open the API and UI
-open http://127.0.0.1:8000/docs       # Backend Swagger UI
-open http://127.0.0.1:5173            # Frontend web app
+open https://127.0.0.1:8000/docs       # Backend Swagger UI
+open https://127.0.0.1:5173            # Frontend web app
 
 # 9. Run linters and type checks (optional)
 make lint
@@ -142,7 +142,7 @@ make db-upgrade
 make db-seed
 
 # 5. Open the API and UI
-open http://127.0.0.1:8000/docs       # Backend Swagger UI
+open https://127.0.0.1:8000/docs       # Backend Swagger UI
 open http://127.0.0.1:5173            # Frontend web app
 
 # 6. Run linters and type checks (optional)
