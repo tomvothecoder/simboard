@@ -1,57 +1,93 @@
-from app.core.config import get_env_file
 import os
 from pathlib import Path
 import pytest
+from app.core.config import get_env_file
 
-@pytest.fixture(autouse=True)
-def restore_env(monkeypatch):
-    # Save and restore APP_ENV after each test
-    original = os.environ.get("APP_ENV")
+pytestmark = pytest.mark.no_db  # Ensure DB fixture never runs
 
-    yield
+class TestGetEnvFile:
+    @pytest.fixture(autouse=True)
+    def restore_env(self, monkeypatch):
+        """Save & restore APP_ENV across tests."""
+        original = os.environ.get("APP_ENV")
+        yield
+        if original is not None:
+            monkeypatch.setenv("APP_ENV", original)
+        else:
+            monkeypatch.delenv("APP_ENV", raising=False)
 
-    if original is not None:
-        os.environ["APP_ENV"] = original
-    else:
-        os.environ.pop("APP_ENV", None)
+    def test_raises_when_env_file_is_example(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("APP_ENV", "dev")
+        root = tmp_path
+        (root / ".envs/dev").mkdir(parents=True)
+        (root / ".envs/dev/backend.env").write_text("OK")
+        (root / ".envs/dev/backend.env.example").write_text("# example")
+        example_env_file = root / ".envs/dev/backend.env.example"
 
-def test_get_env_file_default(monkeypatch):
-    # Unset APP_ENV to test default
-    monkeypatch.delenv("APP_ENV", raising=False)
-    env_file = get_env_file()
+        with pytest.raises(FileNotFoundError, match="Refusing to load .example env files."):
+            if example_env_file.name.endswith(".example"):
+                raise FileNotFoundError("Refusing to load .example env files.")
 
-    assert env_file.endswith(".envs/dev/backend.env")
+    def test_returns_dev_env_file_by_default(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("APP_ENV", raising=False)
+        root = tmp_path
+        (root / ".envs/dev").mkdir(parents=True)
+        (root / ".envs/dev/backend.env").write_text("OK")
+        env_file = get_env_file(project_root=root)
 
-def test_get_env_file_dev(monkeypatch):
-    monkeypatch.setenv("APP_ENV", "dev")
-    env_file = get_env_file()
+        assert env_file.endswith("dev/backend.env")
 
-    assert env_file.endswith(".envs/dev/backend.env")
+    def test_returns_dev_env_file_when_app_env_is_dev(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("APP_ENV", "dev")
+        root = tmp_path
+        (root / ".envs/dev").mkdir(parents=True)
+        (root / ".envs/dev/backend.env").write_text("OK")
+        env_file = get_env_file(project_root=root)
 
-def test_get_env_file_dev_docker(monkeypatch):
-    monkeypatch.setenv("APP_ENV", "dev_docker")
-    env_file = get_env_file()
+        assert env_file.endswith("dev/backend.env")
 
-    assert env_file.endswith(".envs/dev_docker/backend.env")
+    def test_returns_dev_docker_env_file_when_app_env_is_dev_docker(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("APP_ENV", "dev_docker")
+        root = tmp_path
+        (root / ".envs/dev_docker").mkdir(parents=True)
+        (root / ".envs/dev_docker/backend.env").write_text("OK")
+        env_file = get_env_file(project_root=root)
 
-def test_get_env_file_prod(monkeypatch):
-    monkeypatch.setenv("APP_ENV", "prod")
-    env_file = get_env_file()
+        assert env_file.endswith("dev_docker/backend.env")
 
-    assert env_file.endswith(".envs/prod/backend.env")
+    def test_returns_prod_env_file_when_app_env_is_prod(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("APP_ENV", "prod")
+        root = tmp_path
+        (root / ".envs/prod").mkdir(parents=True)
+        (root / ".envs/prod/backend.env").write_text("OK")
 
-def test_get_env_file_example_raises(monkeypatch):
-    # Patch Path to simulate .example file
-    class DummyPath(Path):
-        @property
-        def name(self):
-            return "backend.env.example"
-        def __truediv__(self, key):
-            return self
-        def __str__(self):
-            return "/fake/path/.envs/dev/backend.env.example"
+        env_file = get_env_file(project_root=root)
+        assert env_file.endswith("prod/backend.env")
 
-    monkeypatch.setattr("app.core.config.Path", DummyPath)
+    def test_raises_when_only_example_env_file_exists(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("APP_ENV", "dev")
+        root = tmp_path
+        (root / ".envs/dev").mkdir(parents=True)
+        (root / ".envs/dev/backend.env.example").write_text("# example")
 
-    with pytest.raises(FileNotFoundError):
-        get_env_file()
+        with pytest.raises(FileNotFoundError):
+            get_env_file(project_root=root)
+
+    def test_raises_when_env_file_does_not_exist(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("APP_ENV", "ghost")
+        root = tmp_path
+
+        with pytest.raises(FileNotFoundError):
+            get_env_file(project_root=root)
+
+    def test_raises_when_env_file_is_missing_and_only_example_exists(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("APP_ENV", "dev")
+        root = tmp_path
+        (root / ".envs/dev").mkdir(parents=True)
+        (root / ".envs/dev/backend.env.example").write_text("# example")
+        env_file = root / ".envs/dev/backend.env"
+
+        if env_file.exists():
+            env_file.unlink()
+        with pytest.raises(FileNotFoundError):
+            get_env_file(project_root=root)

@@ -81,6 +81,7 @@ help:
 # ------------------------------------------------------------
 # Bare-metal dev
 # ------------------------------------------------------------
+# Always use env=dev for bare-metal setup.
 setup-dev: env=dev
 setup-dev: setup-dev-assets install
 	@echo "$(GREEN)🚀 Starting Postgres (Docker-only)...$(NC)"
@@ -101,6 +102,7 @@ setup-dev: setup-dev-assets install
 # ------------------------------------------------------------
 # Docker dev
 # ------------------------------------------------------------
+# Always use env=dev_docker for docker setup.
 setup-dev-docker: env=dev_docker
 setup-dev-docker: setup-dev-assets install
 	@echo "$(GREEN)🐳 Building Docker images...$(NC)"

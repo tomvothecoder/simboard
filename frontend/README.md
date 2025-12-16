@@ -11,7 +11,7 @@ Earth System Model) simulation metadata.
 
 - **React 19** — Core UI library
 - **TypeScript** — Type-safe development
-- **Vite 6** — Lightning-fast build and cdev environment
+- **Vite 6** — Lightning-fast build and dev environment
 - **Tailwind CSS** + **shadcn** — Styling and components
 - **ESLint + Prettier** — Code linting and formatting
 - **pnpm** — Dependency management

@@ -16,7 +16,8 @@ const appEnv = process.env.APP_ENV ?? "dev";
 // Vite modes can ONLY be: development, production, test
 // ---------------------------------------------------------------------
 const envDir = path.resolve(__dirname, `.envs/${appEnv}`);
-const rawEnv = loadEnv("development", envDir, "");  // Mode forced to "development"
+// rawEnv forced to "development" for local dev server
+const rawEnv = loadEnv("development", envDir, "");
 
 // ---------------------------------------------------------------------
 // Filter ONLY variables that start with VITE_
@@ -37,6 +38,7 @@ const certPath = viteEnv.VITE_SSL_CERT ?? "../certs/dev.crt";
 // Resolve relative files based on THIS directory, not CWD
 const resolveIfExists = (p: string) => {
   const full = path.resolve(__dirname, p);
+
   return fs.existsSync(full) ? full : null;
 };
 
