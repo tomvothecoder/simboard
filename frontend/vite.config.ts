@@ -65,7 +65,12 @@ export default defineConfig({
 
   // Expose ONLY VITE_* variables
   define: {
-    "import.meta.env": viteEnv,
+    ...Object.fromEntries(
+      Object.entries(viteEnv).map(([key, value]) => [
+        `import.meta.env.${key}`,
+        JSON.stringify(value),
+      ])
+    ),
   },
 
   server: {
