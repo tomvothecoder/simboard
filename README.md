@@ -70,7 +70,7 @@ pnpm --version
 ### 4. Clone the repository
 
 ```bash
-git clone https://github.com/<your-org>/simboard.git
+git clone https://github.com/E3SM-Project/simboard.git
 cd simboard
 ```
 
