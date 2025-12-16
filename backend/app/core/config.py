@@ -1,11 +1,41 @@
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+import os
+from pathlib import Path
+
+
+def get_env_file() -> str:
+    """
+    Determine which environment-specific .env file to load.
+
+    Uses APP_ENV to select one of:
+        * .envs/local/backend.env
+        * .envs/local_docker/backend.env
+        * .envs/production/backend.env
+
+    Defaults to `.envs/local/backend.env` when APP_ENV is not set.
+    Ignores any .example files.
+    """
+    app_env = os.getenv("APP_ENV", "local")
+
+    # Adjust root resolution if your project structure changes
+    project_root = Path(__file__).resolve().parents[3]
+
+    env_file = project_root / ".envs" / app_env / "backend.env"
+
+    # Ignore .example files by not returning them
+    if env_file.name.endswith(".example"):
+        raise FileNotFoundError("Refusing to load .example env files.")
+
+    return str(env_file)
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+        env_file=get_env_file(),  # Dynamically select correct environment file
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     # General application configuration
@@ -42,3 +72,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+print("ENV FILE:", get_env_file())
