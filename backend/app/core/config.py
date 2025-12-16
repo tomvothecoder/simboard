@@ -10,16 +10,17 @@ def get_env_file() -> str:
     Determine which environment-specific .env file to load.
 
     Uses APP_ENV to select one of:
-        * .envs/local/backend.env
-        * .envs/local_docker/backend.env
-        * .envs/production/backend.env
+        * .envs/dev/backend.env
+        * .envs/dev_docker/backend.env
+        * .envs/prod/backend.env
 
-    Defaults to `.envs/local/backend.env` when APP_ENV is not set.
+    Defaults to `.envs/dev/backend.env` when APP_ENV is not set.
     Ignores any .example files.
     """
-    app_env = os.getenv("APP_ENV", "local")
+    app_env = os.getenv("APP_ENV", "dev")
 
     # Adjust root resolution if your project structure changes
+    # simboard/backend/app/core/config.py → go up 3 parents → simboard/
     project_root = Path(__file__).resolve().parents[3]
 
     env_file = project_root / ".envs" / app_env / "backend.env"

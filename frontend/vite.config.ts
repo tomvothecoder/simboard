@@ -4,32 +4,37 @@ import path from "path";
 import { defineConfig, loadEnv } from 'vite';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
-// Determine the active application environment.
-// Defaults to "local" if not provided.
-const appEnv = process.env.APP_ENV ?? "local";
+// ---------------------------------------------------------------------
+// Determine application environment (APP_ENV) mapped to .envs/<env>
+// Defaults to "dev" (replacing old "local")
+// ---------------------------------------------------------------------
+const appEnv = process.env.APP_ENV ?? "dev";
 
-// Load env vars from .envs/<APP_ENV>/frontend.env
+// ---------------------------------------------------------------------
+// Load environment variables from .envs/<env>/frontend.env
+// IMPORTANT: We DO NOT pass `appEnv` as the Vite mode, because
+// Vite modes can ONLY be: development, production, test
+// ---------------------------------------------------------------------
 const envDir = path.resolve(__dirname, `.envs/${appEnv}`);
-const env = loadEnv(appEnv, envDir, "");
+const rawEnv = loadEnv("development", envDir, "");  // Mode forced to "development"
 
-// ---------------------------------------------
-// Filter ONLY safe frontend variables (VITE_*)
-// ---------------------------------------------
+// ---------------------------------------------------------------------
+// Filter ONLY variables that start with VITE_
+// ---------------------------------------------------------------------
 const viteEnv: Record<string, string> = {};
-for (const key in env) {
+for (const key in rawEnv) {
   if (key.startsWith("VITE_")) {
-    viteEnv[key] = env[key];
+    viteEnv[key] = rawEnv[key];
   }
 }
 
-// ---------------------------------------------
+// ---------------------------------------------------------------------
 // Certificate path setup
-// ---------------------------------------------
+// ---------------------------------------------------------------------
 const keyPath = viteEnv.VITE_SSL_KEY ?? "../certs/dev.key";
 const certPath = viteEnv.VITE_SSL_CERT ?? "../certs/dev.crt";
 
-// Resolve relative paths based on the location of this config file,
-// not the working directory (important for Docker/PNPM/WSL setups)
+// Resolve relative files based on THIS directory, not CWD
 const resolveIfExists = (p: string) => {
   const full = path.resolve(__dirname, p);
   return fs.existsSync(full) ? full : null;
@@ -38,27 +43,27 @@ const resolveIfExists = (p: string) => {
 const finalKey = resolveIfExists(keyPath);
 const finalCert = resolveIfExists(certPath);
 
-// ---------------------------------------------
+// ---------------------------------------------------------------------
 // Optional safety checks
-// ---------------------------------------------
+// ---------------------------------------------------------------------
 
-// Warn in local development if HTTPS will not be enabled
+// Warn if HTTPS cannot be enabled locally
 if (!finalKey || !finalCert) {
   console.warn("⚠️  HTTPS disabled: missing dev.key or dev.crt");
 }
 
-// In CI/staging/prod you may require HTTPS and fail fast
+// In CI or prod-like environments, fail if certs are missing
 if (process.env.CI && (!finalKey || !finalCert)) {
   throw new Error("❌ SSL certificates missing in CI environment.");
 }
 
-// ---------------------------------------------
+// ---------------------------------------------------------------------
 // Final Vite config
-// ---------------------------------------------
+// ---------------------------------------------------------------------
 export default defineConfig({
   plugins: [react(), tsconfigPaths()],
 
-  // Expose ONLY VITE_* variables to the client
+  // Expose ONLY VITE_* variables
   define: {
     "import.meta.env": viteEnv,
   },
@@ -67,8 +72,6 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 5173,
 
-    // Enable HTTPS only if certs are available.
-    // Otherwise Vite defaults to HTTP.
     https:
       finalKey && finalCert
         ? {
