@@ -236,7 +236,8 @@ simboard/
 - `.envs/<env>` contains all environment-specific configs
 - Docker Compose uses `.envs/local_docker/*` when running containers
 
-Use GitHub Issues to report bugs or propose features.
+Use [GitHub Issues](https://github.com/E3SM-Project/simboard/issues/new/choose) to report bugs or propose features.
+
 Pull requests should include tests + documentation updates.
 
 ---
