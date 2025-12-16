@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import api from '@/api/axios';
+import api from '@/api/api';
 import type { Machine, SimulationOut } from '@/types';
 
 const SIMULATIONS_URL = '/simulations';

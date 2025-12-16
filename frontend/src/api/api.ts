@@ -11,12 +11,12 @@ export const registerLogoutHandler = (fn: LogoutFn): void => {
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
-   // required for cookie auth
+   // Required for cookie authentication (e.g., GitHub OAuth).
   withCredentials: true,
   timeout: 10000,
 });
 
-// Intercept 401/403 to auto-logout
+// Intercept 401/403 to auto-logout.
 api.interceptors.response.use(
   (response: AxiosResponse) => response,
   (error: AxiosError) => {

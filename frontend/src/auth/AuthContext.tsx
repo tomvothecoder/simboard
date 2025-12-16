@@ -8,7 +8,7 @@ import React, {
   useState,
 } from 'react';
 
-import api, { registerLogoutHandler } from '@/api/axios';
+import api, { registerLogoutHandler } from '@/api/api';
 import { toast } from '@/hooks/use-toast';
 import type { User } from '@/types/user';
 
