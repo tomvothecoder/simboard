@@ -1,8 +1,8 @@
+import os
+from pathlib import Path
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-import os
-from pathlib import Path
 
 
 def get_env_file(project_root: Path | None = None) -> str:
@@ -29,6 +29,8 @@ def get_env_file(project_root: Path | None = None) -> str:
 
     if not env_file.exists():
         raise FileNotFoundError(f"Environment file '{env_file}' does not exist.")
+
+    # TODO: Validate that required env vars are present?
 
     return str(env_file)
 
