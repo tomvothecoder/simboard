@@ -1,15 +1,13 @@
-import { RouteObject, useParams, useRoutes } from 'react-router-dom';
+import { useRoutes } from 'react-router-dom';
 
-import { useSimulation } from '@/api/simulation';
-import AuthCallback from '@/auth/AuthCallback';
-import Browse from '@/pages/Browse/Browse';
-import Compare from '@/pages/Compare/Compare';
-import Docs from '@/pages/Docs/Docs';
-import Home from '@/pages/Home/Home';
-import SimulationDetails from '@/pages/SimulationsCatalog/SimulationDetails';
-import SimulationsCatalog from '@/pages/SimulationsCatalog/SimulationsCatalog';
-import Upload from '@/pages/Upload/Upload';
-import ProtectedRoute from '@/routes/ProtectedRoute';
+import { AuthCallback } from '@/auth/AuthCallback';
+import { ProtectedRoute } from '@/auth/ProtectedRoute';
+import { browseRoutes } from '@/features/browse/routes';
+import { compareRoutes } from '@/features/compare/routes';
+import { docsRoutes } from '@/features/docs/routes';
+import { homeRoutes } from '@/features/home/routes';
+import { simulationsRoutes } from '@/features/simulations/routes';
+import { uploadRoutes } from '@/features/upload/routes';
 import type { Machine, SimulationOut } from '@/types/index';
 
 interface RoutesProps {
@@ -20,95 +18,29 @@ interface RoutesProps {
   selectedSimulations: SimulationOut[];
 }
 
-const SimulationDetailsRoute = () => {
-  const { id } = useParams<{ id: string }>();
+export const AppRoutes = (props: RoutesProps) => {
+  const routes = [
+    ...homeRoutes(props),
+    ...browseRoutes(props),
+    ...simulationsRoutes(props),
+    ...compareRoutes(props),
+    ...docsRoutes(),
 
-  const { data: simulation, loading, error } = useSimulation(id || '');
-
-  if (!id)
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center text-gray-500">Invalid simulation ID</div>
-      </div>
-    );
-  if (loading)
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center text-gray-500">Loading simulation details...</div>
-      </div>
-    );
-  if (error)
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center text-red-600">Error: {error}</div>
-      </div>
-    );
-  if (!simulation)
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center text-gray-500">Simulation not found</div>
-      </div>
-    );
-
-  return <SimulationDetails simulation={simulation} />;
-};
-
-const createRoutes = ({
-  simulations,
-  machines,
-  selectedSimulationIds,
-  setSelectedSimulationIds,
-  selectedSimulations,
-}: RoutesProps): RouteObject[] => {
-  return [
-    { path: '/', element: <Home simulations={simulations} machines={machines} /> },
-    {
-      path: '/browse',
-      element: (
-        <Browse
-          simulations={simulations}
-          selectedSimulationIds={selectedSimulationIds}
-          setSelectedSimulationIds={setSelectedSimulationIds}
-        />
-      ),
-    },
-    { path: '/simulations', element: <SimulationsCatalog simulations={simulations} /> },
-    { path: '/simulations/:id', element: <SimulationDetailsRoute /> },
-    {
-      path: '/compare',
-      element: (
-        <Compare
-          simulations={simulations}
-          selectedSimulationIds={selectedSimulationIds}
-          setSelectedSimulationIds={setSelectedSimulationIds}
-          selectedSimulations={selectedSimulations}
-        />
-      ),
-    },
     {
       element: <ProtectedRoute />,
-      children: [{ path: '/upload', element: <Upload machines={machines} /> }],
+      children: uploadRoutes(props),
     },
-    { path: '/docs', element: <Docs /> },
-    { path: '/auth/callback', element: <AuthCallback /> },
-    { path: '*', element: <div className="p-8">404 - Page not found</div> },
-  ];
-};
 
-export const AppRoutes = ({
-  simulations,
-  machines,
-  selectedSimulationIds,
-  setSelectedSimulationIds,
-  selectedSimulations,
-}: RoutesProps) => {
-  const routes = createRoutes({
-    simulations,
-    machines,
-    selectedSimulationIds,
-    setSelectedSimulationIds,
-    selectedSimulations,
-  });
-  const routing = useRoutes(routes);
-  return routing;
+    {
+      path: '/auth/callback',
+      element: <AuthCallback />,
+    },
+
+    {
+      path: '*',
+      element: <div className="p-8">404 - Page not found</div>,
+    },
+  ];
+
+  return useRoutes(routes);
 };

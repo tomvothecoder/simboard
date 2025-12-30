@@ -21,6 +21,17 @@ Earth System Model) simulation metadata.
 For the development guide, see the [root README.md file](../README.md). It includes
 information on how to get the frontend service started via Docker.
 
+## Architecture
+
+- Features are the primary unit (e.g., `features/browse`)
+  - `simulations` and `machines` are domain features
+  - Make sure to update the "Deep cross-feature imports" section under `no-restricted-imports` with new domain features.
+  - Other features (browse, compare, home) may depend on `simulations`.
+  - Features must not import or depend on each other directly.
+- API logic lives under `features/*/api`
+- Hooks live under `features/*/hooks`
+- Shared components must be truly shared
+
 ## Expanding the ESLint Configuration
 
 If you are developing a production-grade application, you can enable **type-aware lint rules** for better code quality and consistency.
