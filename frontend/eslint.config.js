@@ -15,22 +15,26 @@ export default [
   // --------------------------------------------------
   {
     ignores: [
+      // build output
       'dist',
+
+      // generated / vendor UI
       'src/components/ui/**',
       'src/components/ui/use-toast.ts',
-      'src/components/examples/**', // auto-generated examples
+      'src/components/examples/**',
+
+      // tooling / config files
+      'tailwind.config.js',
+      'postcss.config.js',
+      'vite.config.ts',
     ],
   },
-
   // --------------------------------------------------
   // Base JS + TS
   // --------------------------------------------------
   js.configs.recommended,
-  // TypeScript recommended (array of flat configs)
   ...tseslint.configs.recommended,
-  // Prettier: disable conflicting stylistic rules
   prettier,
-
   // --------------------------------------------------
   // Frontend project rules
   // --------------------------------------------------
@@ -48,7 +52,6 @@ export default [
         document: 'readonly',
       },
 
-      // REQUIRED for monorepo + path aliases
       parserOptions: {
         project: path.resolve('./tsconfig.json'),
         tsconfigRootDir: path.resolve('.'),
@@ -58,7 +61,6 @@ export default [
     settings: {
       react: { version: 'detect' },
 
-      // REQUIRED: resolve @/ aliases
       'import/resolver': {
         typescript: {
           project: path.resolve('./tsconfig.json'),
@@ -66,28 +68,15 @@ export default [
       },
 
       // ----------------------------------------------
-      // Architectural boundaries (feature-based)
+      // Architectural boundaries (definitions only)
       // ----------------------------------------------
       'boundaries/elements': [
-        // Feature modules (entire subtree)
         { type: 'feature', pattern: 'src/features/**' },
-
-        // Design system / UI primitives
         { type: 'ui', pattern: 'src/components/ui/**' },
-
-        // Shared composite components
         { type: 'shared', pattern: 'src/components/shared/**' },
-
-        // Utilities
         { type: 'lib', pattern: 'src/lib/**' },
-
-        // Domain / API contract types
         { type: 'types', pattern: 'src/types/**' },
-
-        // API client & adapters
         { type: 'api', pattern: 'src/api/**' },
-
-        // App-level routing & composition
         { type: 'routes', pattern: 'src/routes/**' },
       ],
     },
@@ -118,57 +107,33 @@ export default [
       '@typescript-eslint/explicit-module-boundary-types': 'off',
       '@typescript-eslint/no-explicit-any': 'warn',
 
-      // Import hygiene:
-      // - Prefer absolute imports (@/) over deep relative paths
-      // - Discourage deep cross-feature imports (boundaries handle final enforcement)
+      // Import hygiene (relative only)
       'no-restricted-imports': [
         'warn',
         {
-          patterns: [
-            // --------------------------------------------
-            // Deep relative imports (fragile)
-            // --------------------------------------------
-            '../..',
-            '../../*',
-            '../../..',
-            '../../../*',
-            '../../../..',
-            '../../../../*',
-
-            // --------------------------------------------
-            // Deep cross-feature imports (early guardrail)
-            // Allow domain feature: simulations
-            // --------------------------------------------
-            '@/features/*/*/*',
-            '!@/features/simulations/**',
-            '!@/features/machines/**',
-          ],
+          patterns: ['../..', '../../*', '../../..', '../../../*', '../../../..', '../../../../*'],
         },
       ],
+
       // ----------------------------------------------
-      // Architectural enforcement
+      // Architectural boundaries
       // ----------------------------------------------
       'boundaries/element-types': [
         'error',
         {
-          default: 'allow',
+          default: 'disallow',
           rules: [
             {
               from: 'feature',
-              disallow: ['feature'],
-              message:
-                'Features must not import other features. Use shared components or hooks instead.',
+              allow: ['ui', 'shared', 'lib', 'types', 'api'],
             },
             {
-              from: 'hook',
-              disallow: ['api-client'],
-              message: 'Hooks must not import the API client directly. Use feature API modules.',
+              from: 'routes',
+              allow: ['feature', 'ui', 'shared', 'types'],
             },
             {
               from: 'ui',
-              disallow: ['feature-api'],
-              message:
-                'UI components must not import feature API modules directly. Use hooks instead.',
+              allow: ['lib', 'types'],
             },
           ],
         },

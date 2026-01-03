@@ -1,28 +1,11 @@
 import { LogOut } from 'lucide-react';
-import React, {
-  createContext,
-  ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import React, { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 
 import { api, registerLogoutHandler } from '@/api/api';
+import { setAuthenticated } from '@/api/authState';
+import { AuthContext, AuthContextType } from '@/auth/context';
 import { toast } from '@/hooks/use-toast';
 import type { User } from '@/types/user';
-
-interface AuthContextType {
-  user: User | null;
-  loading: boolean;
-  isAuthenticated: boolean;
-  loginWithGithub: () => void;
-  logout: () => Promise<void>;
-  refreshUser: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -32,8 +15,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const { data } = await api.get<User>('/users/me');
       setUser(data);
+      setAuthenticated(true);
     } catch {
       setUser(null);
+      setAuthenticated(false);
     } finally {
       setLoading(false);
     }
@@ -62,16 +47,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       /* ignore */
     } finally {
       setUser(null);
+      setAuthenticated(false);
 
       if (!silent) {
         toast({
-          title: (
+          title: 'Signed Out',
+          description: (
             <div className="flex items-center gap-2">
               <LogOut className="h-5 w-5 text-gray-600" />
-              Signed out
+              You’ve been logged out.
             </div>
           ),
-          description: 'You’ve been logged out.',
           duration: 2000,
         });
       }
@@ -104,10 +90,4 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
-
-export const useAuth = (): AuthContextType => {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within an AuthProvider');
-  return context;
 };
