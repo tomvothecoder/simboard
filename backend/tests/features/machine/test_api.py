@@ -35,7 +35,7 @@ class TestCreateMachine:
             "notes": "Another test machine",
         }
 
-        res = client.post("/machines", json=payload)
+        res = client.post("/api/machines", json=payload)
 
         assert res.status_code == 201
         data = res.json()
@@ -93,7 +93,7 @@ class TestCreateMachine:
             "notes": "Duplicate machine",
         }
 
-        res = client.post("/machines", json=payload)
+        res = client.post("/api/machines", json=payload)
         assert res.status_code == 400
         assert res.json()["detail"] == "Machine with this name already exists"
 
@@ -128,7 +128,7 @@ class TestListMachines:
             "chrysalis",
         }
 
-        res = client.get("/machines")
+        res = client.get("/api/machines")
         assert res.status_code == 200
         data = res.json()
 
@@ -167,7 +167,7 @@ class TestGetMachine:
         db.commit()
         db.refresh(expected)
 
-        res = client.get(f"/machines/{expected.id}")
+        res = client.get(f"/api/machines/{expected.id}")
         assert res.status_code == 200
 
         result_endpoint = res.json()
@@ -185,6 +185,6 @@ class TestGetMachine:
     def test_endpoint_raises_404_if_machine_not_found(self, client):
         random_id = uuid4()
 
-        res = client.get(f"/machines/{random_id}")
+        res = client.get(f"/api/machines/{random_id}")
         assert res.status_code == 404
         assert res.json()["detail"] == "Machine not found"
