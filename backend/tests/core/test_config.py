@@ -37,7 +37,7 @@ class TestGetEnvFile:
         (root / ".envs/dev/backend.env").write_text("OK")
         env_file = get_env_file(project_root=root)
 
-        assert env_file.endswith("dev/backend.env")
+        assert env_file.endswith("dev/backend.env")  # type: ignore[union-attr]
 
     def test_returns_dev_env_file_when_app_env_is_dev(self, tmp_path, monkeypatch):
         monkeypatch.setenv("APP_ENV", "dev")
@@ -46,7 +46,7 @@ class TestGetEnvFile:
         (root / ".envs/dev/backend.env").write_text("OK")
         env_file = get_env_file(project_root=root)
 
-        assert env_file.endswith("dev/backend.env")
+        assert env_file.endswith("dev/backend.env")  # type: ignore[union-attr]
 
     def test_returns_dev_docker_env_file_when_app_env_is_dev_docker(
         self, tmp_path, monkeypatch
