@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import uuid4
 
-from pydantic import AnyUrl, HttpUrl
+from pydantic import HttpUrl
 
 from app.common.schemas.utils import to_snake_case
 from app.features.machine.schemas import MachineOut
@@ -27,7 +27,7 @@ class TestSimulationCreateSchema:
             "gridResolution": "1.9x2.5",
             "initializationType": "startup",
             "simulationType": "control",
-            "status": "new",
+            "status": "created",
             "machineId": uuid4(),
             "simulationStartDate": datetime(2023, 1, 1, 0, 0, 0),
             "createdBy": uuid4(),
@@ -49,7 +49,7 @@ class TestSimulationCreateSchema:
             "gridResolution": "1.9x2.5",
             "initializationType": "startup",
             "simulationType": "control",
-            "status": "new",
+            "status": "created",
             "machineId": uuid4(),
             "simulationStartDate": datetime(2023, 1, 1, 0, 0, 0),
             "gitTag": "v1.0",
@@ -72,7 +72,7 @@ class TestSimulationCreateSchema:
             "artifacts": [
                 {
                     "kind": "output",
-                    "uri": AnyUrl("http://example.com/artifact1"),
+                    "uri": "http://example.com/artifact1",
                     "label": "artifact1",
                 }
             ],
@@ -114,7 +114,7 @@ class TestSimulationOutSchema:
             "grid_resolution": "1.9x2.5",
             "initialization_type": "startup",
             "simulation_type": "control",
-            "status": "new",
+            "status": "created",
             "machine_id": uuid4(),
             "simulation_start_date": datetime(2023, 1, 1, 0, 0, 0),
             "created_by": uuid4(),
@@ -190,7 +190,7 @@ class TestSimulationOutSchema:
             "grid_resolution": "1.9x2.5",
             "initialization_type": "startup",
             "simulation_type": "control",
-            "status": "new",
+            "status": "created",
             "machine_id": uuid4(),
             "simulation_start_date": datetime(2023, 1, 1, 0, 0, 0),
             "created_by": uuid4(),
@@ -235,7 +235,7 @@ class TestSimulationOutSchema:
             "artifacts": [
                 {
                     "kind": "output",
-                    "uri": AnyUrl("http://example.com/artifact1"),
+                    "uri": "http://example.com/artifact1",
                     "label": "artifact1",
                     "id": uuid4(),
                     "created_at": datetime(2023, 1, 1, 0, 0, 0),
@@ -280,7 +280,7 @@ class TestSimulationOutSchema:
             grid_resolution="1.9x2.5",
             initialization_type="startup",
             simulation_type="control",
-            status="new",
+            status="created",
             machine_id=uuid4(),
             simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
             created_by=uuid4(),
@@ -307,7 +307,7 @@ class TestSimulationOutSchema:
             artifacts=[
                 ArtifactOut(
                     kind=ArtifactKind.OUTPUT,
-                    uri=AnyUrl("http://example.com/artifact1"),
+                    uri="http://example.com/artifact1",
                     label="artifact1",
                     id=uuid4(),
                     created_at=datetime(2023, 1, 1, 0, 0, 0),
@@ -315,7 +315,7 @@ class TestSimulationOutSchema:
                 ),
                 ArtifactOut(
                     kind=ArtifactKind.ARCHIVE,
-                    uri=AnyUrl("http://example.com/artifact2"),
+                    uri="http://example.com/artifact2",
                     label="artifact2",
                     id=uuid4(),
                     created_at=datetime(2023, 1, 1, 0, 0, 0),
@@ -323,7 +323,7 @@ class TestSimulationOutSchema:
                 ),
                 ArtifactOut(
                     kind=ArtifactKind.OUTPUT,
-                    uri=AnyUrl("http://example.com/artifact3"),
+                    uri="http://example.com/artifact3",
                     label="artifact3",
                     id=uuid4(),
                     created_at=datetime(2023, 1, 1, 0, 0, 0),
@@ -348,7 +348,7 @@ class TestSimulationOutSchema:
             grid_resolution="1.9x2.5",
             initialization_type="startup",
             simulation_type="control",
-            status="new",
+            status="created",
             machine_id=uuid4(),
             simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
             created_by=uuid4(),

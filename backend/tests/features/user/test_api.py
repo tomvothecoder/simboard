@@ -42,7 +42,7 @@ class TestAuthRoutes:
         self, async_client: AsyncClient
     ) -> None:
         """Ensure the GitHub OAuth authorize endpoint redirects or renders."""
-        response = await async_client.get("/auth/github/authorize")
+        response = await async_client.get("/api/auth/github/authorize")
 
         assert response.status_code in (
             status.HTTP_200_OK,
@@ -68,7 +68,7 @@ class TestAuthRoutes:
             ),
         ):
             response = await async_client.get(
-                "/auth/github/callback?code=fake&state=fake"
+                "/api/auth/github/callback?code=fake&state=fake"
             )
 
         # Depending on cookie/JWT config, FastAPI-Users may redirect or just 400
@@ -84,7 +84,7 @@ class TestLogOutRoute:
         cookie_name = settings.cookie_name
         async_client.cookies.set(cookie_name, "fake_cookie_value")
 
-        response = await async_client.post("/auth/logout")
+        response = await async_client.post("/api/auth/logout")
 
         assert response.status_code == status.HTTP_200_OK
         assert response.json() == {"message": "Successfully logged out"}
@@ -111,7 +111,7 @@ class TestLogOutRoute:
     @pytest.mark.asyncio
     async def test_logout_without_cookie(self, async_client: AsyncClient) -> None:
         """Ensure the logout endpoint works even if no cookie is set."""
-        response = await async_client.post("/auth/logout")
+        response = await async_client.post("/api/auth/logout")
 
         assert response.status_code == status.HTTP_200_OK
         assert response.json() == {"message": "Successfully logged out"}
@@ -122,7 +122,7 @@ class TestUserRoutes:
 
     async def test_users_me_requires_auth(self, async_client: AsyncClient) -> None:
         """Unauthenticated request to /users/me should return 401."""
-        response = await async_client.get("/users/me")
+        response = await async_client.get("/api/users/me")
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
@@ -141,9 +141,9 @@ class TestUserRoutes:
                 "role": UserRole.USER.value,
             }
 
-        override_dependency("/users/me", "current_user", override_user)
+        override_dependency("/api/users/me", "current_user", override_user)
 
-        response = await async_client.get("/users/me")
+        response = await async_client.get("/api/users/me")
         assert response.status_code == 200, response.text
 
         data = response.json()
