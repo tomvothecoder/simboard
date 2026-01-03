@@ -1,0 +1,155 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  backend:
+    name: Backend checks
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: simboard
+          POSTGRES_PASSWORD: simboard
+          POSTGRES_DB: simboard
+        options: >-
+          --health-cmd="pg_isready -U simboard -d simboard"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      # --------------------------------------------------
+      # Execution context
+      # --------------------------------------------------
+      CI: "true"
+      APP_ENV: test
+
+      # --------------------------------------------------
+      # General
+      # --------------------------------------------------
+      ENV: test
+      ENVIRONMENT: test
+      DOMAIN: localhost
+      STACK_NAME: simboard
+      PORT: 8000
+
+      # --------------------------------------------------
+      # Frontend (required by backend config)
+      # --------------------------------------------------
+      FRONTEND_ORIGIN: https://127.0.0.1:5173
+      FRONTEND_AUTH_REDIRECT_URL: https://127.0.0.1:5173/auth/callback
+
+      # --------------------------------------------------
+      # Database
+      # --------------------------------------------------
+      DATABASE_URL: postgresql+psycopg://simboard:simboard@localhost:5432/simboard
+      TEST_DATABASE_URL: postgresql+psycopg://simboard:simboard@localhost:5432/simboard_test
+
+      # --------------------------------------------------
+      # GitHub OAuth (dummy values for CI)
+      # --------------------------------------------------
+      GITHUB_CLIENT_ID: dummy
+      GITHUB_CLIENT_SECRET: dummy
+      GITHUB_REDIRECT_URL: http://localhost/api/auth/github/callback
+      GITHUB_STATE_SECRET_KEY: dummy
+
+      # --------------------------------------------------
+      # Cookie config
+      # --------------------------------------------------
+      COOKIE_NAME: simboard_auth
+      COOKIE_SECURE: "false"
+      COOKIE_HTTPONLY: "true"
+      COOKIE_SAMESITE: lax
+      COOKIE_MAX_AGE: "3600"
+
+    steps:
+      # -------------------------
+      # Skip duplicate runs
+      # -------------------------
+      - name: Skip duplicate runs
+        uses: fkirc/skip-duplicate-actions@v5
+        with:
+          github_token: ${{ github.token }}
+          skip_after_successful_duplicate: true
+          cancel_others: true
+
+      # -------------------------
+      # Checkout
+      # -------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -------------------------
+      # Python
+      # -------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # -------------------------
+      # Install uv
+      # -------------------------
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      # -------------------------
+      # Cache uv + dependencies
+      # -------------------------
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/uv
+            backend/.venv
+          key: uv-${{ runner.os }}-${{ hashFiles('backend/uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
+
+      # -------------------------
+      # Install backend deps
+      # -------------------------
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          uv venv .venv
+          uv sync --all-groups
+
+      # -------------------------
+      # Cache pre-commit
+      # -------------------------
+      - name: Cache pre-commit
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            pre-commit-${{ runner.os }}-
+
+      # -------------------------
+      # Run pre-commit
+      # -------------------------
+      - name: Run pre-commit
+        working-directory: backend
+        run: |
+          uv run pre-commit run --all-files
+
+      # -------------------------
+      # Run pytest
+      # -------------------------
+      - name: Run pytest
+        working-directory: backend
+        run: |
+          uv run pytest
