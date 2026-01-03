@@ -42,9 +42,6 @@ def get_env_file(project_root: Path | None = None) -> str | None:
 
     env_file = project_root / ".envs" / app_env / "backend.env"
 
-    if env_file.name.endswith(".example"):
-        raise FileNotFoundError("Refusing to load .example env files.")
-
     if not env_file.exists():
         raise FileNotFoundError(
             f"Environment file '{env_file}' does not exist. "

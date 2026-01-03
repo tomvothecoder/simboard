@@ -99,20 +99,6 @@ class TestGetEnvFile:
         with pytest.raises(FileNotFoundError):
             get_env_file(project_root=root)
 
-    def test_raises_when_env_file_is_missing_and_only_example_exists(
-        self, tmp_path, monkeypatch
-    ):
-        monkeypatch.setenv("APP_ENV", "dev")
-        root = tmp_path
-        (root / ".envs/dev").mkdir(parents=True)
-        (root / ".envs/dev/backend.env.example").write_text("# example")
-        env_file = root / ".envs/dev/backend.env"
-
-        if env_file.exists():
-            env_file.unlink()
-        with pytest.raises(FileNotFoundError):
-            get_env_file(project_root=root)
-
     def test_returns_none_if_environment_is_ci(self, tmp_path, monkeypatch):
         monkeypatch.setenv("CI", True)
         root = tmp_path
