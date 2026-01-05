@@ -1,16 +1,25 @@
-name: CI
+name: Backend CI
 
 on:
   pull_request:
     branches: [main]
+    paths:
+      - backend/**
+      - .pre-commit-config.yaml
+      - .github/workflows/backend-ci.yml
   push:
     branches: [main]
+    paths:
+      - backend/**
+      - .pre-commit-config.yaml
+      - .github/workflows/backend-ci.yml
   workflow_dispatch: {}
 
 jobs:
   backend:
     name: Backend checks
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     services:
       postgres:
@@ -60,7 +69,7 @@ jobs:
       # --------------------------------------------------
       GITHUB_CLIENT_ID: dummy
       GITHUB_CLIENT_SECRET: dummy
-      GITHUB_REDIRECT_URL: http://localhost/api/auth/github/callback
+      GITHUB_REDIRECT_URL: http://localhost/api/v1/auth/github/callback
       GITHUB_STATE_SECRET_KEY: dummy
 
       # --------------------------------------------------
@@ -108,15 +117,13 @@ jobs:
       # -------------------------
       # Cache uv + dependencies
       # -------------------------
-      - name: Cache uv
+      - name: Cache uv cache
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.cache/uv
-            backend/.venv
-          key: uv-${{ runner.os }}-${{ hashFiles('backend/uv.lock') }}
+          path: ~/.cache/uv
+          key: uv-cache-${{ runner.os }}-${{ hashFiles('backend/uv.lock') }}
           restore-keys: |
-            uv-${{ runner.os }}-
+            uv-cache-${{ runner.os }}-
 
       # -------------------------
       # Install backend deps
@@ -135,21 +142,24 @@ jobs:
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
-          restore-keys: |
-            pre-commit-${{ runner.os }}-
 
       # -------------------------
       # Run pre-commit
       # -------------------------
-      - name: Run pre-commit
-        working-directory: backend
+      - name: Run pre-commit (backend only)
+        env:
+          SKIP: frontend-eslint,frontend-prettier
         run: |
-          uv run pre-commit run --all-files
+          uv run --project backend pre-commit run --all-files
 
       # -------------------------
       # Run pytest
       # -------------------------
       - name: Run pytest
+        # NOTE:
+        # Pytest (and Alembic) must run from the backend directory so relative paths
+        # like alembic.ini and script_location resolve correctly. `--project` only
+        # selects the virtualenv; it does not change the working directory.
         working-directory: backend
         run: |
-          uv run pytest
+          uv run pytest --strict-markers

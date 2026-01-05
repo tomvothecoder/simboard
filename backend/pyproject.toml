@@ -51,7 +51,7 @@ dev = [
   # --- Development Tools ---
   "ruff==0.14.1",
   "pre-commit==4.3.0",
-  "mypy==1.18.2",
+  "mypy==1.19.1",
 
   # --- Runtime / ML ---
   "torch==2.7.1",
@@ -122,13 +122,22 @@ convention = "numpy"
 
 [tool.ruff.lint.per-file-ignores]
 # FastAPI’s use of Depends(...) in defaults is safe and idiomatic. Ignore B008 (do not call a method in argument defaults) in router files.
-"app/features/*/api.py" = ["B008"]
-"app/features/*/api/*.py" = ["B008"]
+"**/app/features/*/api.py" = ["B008"]
+"**/app/features/*/api/*.py" = ["B008"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
 
 [tool.pytest.ini_options]
 # Docs: https://docs.pytest.org/en/7.2.x/reference/customize.html#configuration
 junit_family = "xunit2"
-addopts = "--cov=app --cov-report term --cov-report html:tests_coverage_reports/htmlcov --cov-report xml:tests_coverage_reports/coverage.xml -s"
+addopts = [
+  "--cov=app",
+  "--cov-report=term-missing:skip-covered",
+  "--cov-report=html:tests_coverage_reports/htmlcov",
+  "--cov-report=xml:tests_coverage_reports/coverage.xml",
+  "-s",
+]
 python_files = ["tests.py", "test_*.py"]
 
 [tool.mypy]
