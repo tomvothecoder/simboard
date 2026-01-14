@@ -1,12 +1,3 @@
-/**
- * Request payload for updating a simulation (PATCH).
- * All fields optional, matches FastAPI SimulationUpdate schema.
- */
-export type SimulationUpdate = Partial<Omit<SimulationCreate, 'createdBy' | 'lastUpdatedBy'>> & {
-  artifacts?: ArtifactIn[];
-  links?: ExternalLinkIn[];
-  extra?: Record<string, unknown>;
-};
 import type { ArtifactIn, ArtifactOut } from '@/types/artifact';
 import type { ExternalLinkIn, ExternalLinkOut } from '@/types/link';
 import type { Machine } from '@/types/machine';
@@ -79,6 +70,16 @@ export interface SimulationCreateForm extends SimulationCreate {
   runScriptPaths?: string[] | null;
   postprocessingScriptPaths?: string[] | null;
 }
+
+/**
+ * Request payload for updating a simulation (PATCH).
+ * All fields optional, matches FastAPI SimulationUpdate schema.
+ */
+export type SimulationUpdate = Partial<Omit<SimulationCreate, 'createdBy' | 'lastUpdatedBy'>> & {
+  artifacts?: ArtifactIn[];
+  links?: ExternalLinkIn[];
+  extra?: Record<string, unknown>;
+};
 
 /**
  * API response model for a simulation (from FastAPI / DB).
