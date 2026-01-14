@@ -15,7 +15,7 @@ import { SimulationPathCard } from '@/features/simulations/components/Simulation
 import { SimulationTypeBadge } from '@/features/simulations/components/SimulationTypeBadge';
 import { canEditSimulationField, SIMULATION_FIELDS } from '@/features/simulations/simulationFields';
 import { cn } from '@/lib/utils';
-import type { SimulationOut, SimulationUpdate } from '@/types';
+import type { Machine, SimulationOut, SimulationUpdate } from '@/types';
 import { formatDate, getSimulationDuration } from '@/utils/utils';
 
 // -------------------- Types --------------------
@@ -32,8 +32,8 @@ const FieldRow = ({ label, children }: { label: string; children: React.ReactNod
   </div>
 );
 
-const ReadonlyInput = ({ value, className }: { value?: string | null; className?: string }) => (
-  <Input value={value || '—'} readOnly className={cn('h-8 text-sm', className)} />
+const ReadonlyValue = ({ value }: { value?: string | null }) => (
+  <span className="text-sm text-foreground">{value || '—'}</span>
 );
 
 // -------------------- View Component --------------------
@@ -57,7 +57,9 @@ export const SimulationDetailsView = ({
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const ctx = { isOwner: canEdit, isAdmin: false };
+  // Todo: When implementing real permissions, adjust this context accordingly.
+  // Example:   isAdmin: currentUser.role === 'admin',
+  const ctx = { isOwner: canEdit, isAdmin: canEdit };
 
   const canEditField = (name: keyof typeof SIMULATION_FIELDS) =>
     editMode && canEditSimulationField(SIMULATION_FIELDS[name], ctx);
@@ -199,33 +201,79 @@ export const SimulationDetailsView = ({
                         onChange={(e) => handleChange(f as any, e.target.value)}
                       />
                     ) : (
-                      <ReadonlyInput value={(simulation as any)[f]} />
+                      <ReadonlyValue value={(simulation as any)[f]} />
                     )}
                   </FieldRow>
                 ))}
               </CardContent>
             </Card>
 
-            {/* Model Setup */}
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Model Setup</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
+                {/* Simulation Type */}
                 <FieldRow label={SIMULATION_FIELDS.simulationType.label}>
-                  <ReadonlyInput value={simulation.simulationType} />
+                  {editMode && canEditSimulationField(SIMULATION_FIELDS.simulationType, ctx) ? (
+                    <select
+                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
+                      value={form.simulationType}
+                      onChange={(e) => handleChange('simulationType', e.target.value)}
+                    >
+                      {SIMULATION_FIELDS.simulationType.options!.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <ReadonlyValue value={simulation.simulationType} />
+                  )}
                 </FieldRow>
+
                 <FieldRow label={SIMULATION_FIELDS.status.label}>
-                  <ReadonlyInput value={simulation.status} />
+                  {editMode && canEditSimulationField(SIMULATION_FIELDS.status, ctx) ? (
+                    <select
+                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
+                      value={form.status}
+                      onChange={(e) => handleChange('status', e.target.value)}
+                    >
+                      {SIMULATION_FIELDS.status.options!.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <ReadonlyValue value={simulation.status} />
+                  )}
                 </FieldRow>
+
                 <FieldRow label={SIMULATION_FIELDS.campaignId.label}>
-                  <ReadonlyInput value={simulation.campaignId} />
+                  {editMode && canEditSimulationField(SIMULATION_FIELDS.campaignId, ctx) ? (
+                    <Input
+                      value={form.campaignId ?? ''}
+                      onChange={(e) => handleChange('campaignId', e.target.value || null)}
+                    />
+                  ) : (
+                    <ReadonlyValue value={simulation.campaignId} />
+                  )}
                 </FieldRow>
+
                 <FieldRow label={SIMULATION_FIELDS.experimentTypeId.label}>
-                  <ReadonlyInput value={simulation.experimentTypeId} />
+                  {editMode && canEditSimulationField(SIMULATION_FIELDS.experimentTypeId, ctx) ? (
+                    <Input
+                      value={form.experimentTypeId ?? ''}
+                      onChange={(e) => handleChange('experimentTypeId', e.target.value || null)}
+                    />
+                  ) : (
+                    <ReadonlyValue value={simulation.experimentTypeId} />
+                  )}
                 </FieldRow>
+
                 <FieldRow label={SIMULATION_FIELDS.machineId.label}>
-                  <ReadonlyInput value={simulation.machine.name} />
+                  <ReadonlyValue value={simulation.machineId} />
                 </FieldRow>
               </CardContent>
             </Card>
@@ -321,7 +369,7 @@ export const SimulationDetailsView = ({
                   <Label className="text-xs text-muted-foreground min-w-[100px]">
                     Simulation UUID:
                   </Label>
-                  <ReadonlyInput
+                  <ReadonlyValue
                     value={
                       simulation.id
                         ? `${simulation.id.slice(0, 8)}…${simulation.id.slice(-6)}`

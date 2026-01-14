@@ -1,9 +1,8 @@
-// simulationFields.ts
 import type { SimulationCreate, SimulationOut } from '@/types';
 
 /**
  * Fields that exist both:
- * - at creation time (SimulationCreate / SimulationCreateForm)
+ * - at creation time (SimulationCreate)
  * - after creation (SimulationOut)
  *
  * NOTE:
@@ -19,15 +18,13 @@ export type SimulationFieldDef = {
   label: string;
 
   /**
-   * Whether this field can be edited after creation (PATCH semantics).
+   * Who may edit this field on the details page.
+   * If omitted, the field is immutable after creation.
    */
-  editableAfterCreate: boolean;
-
-  /**
-   * Who may edit the field (if editableAfterCreate = true).
-   */
-  editableByOwner?: boolean;
-  editableByAdmin?: boolean;
+  editable?: {
+    owner?: boolean;
+    admin?: boolean;
+  };
 
   /**
    * UI hint only (UploadPage and Details page render differently).
@@ -55,61 +52,56 @@ export const SIMULATION_FIELDS: Record<SimulationFieldName, SimulationFieldDef> 
   name: {
     name: 'name',
     label: 'Simulation Name',
-    editableAfterCreate: true,
-    editableByOwner: true,
+    editable: { owner: true },
     inputType: 'text',
   },
 
   caseName: {
     name: 'caseName',
     label: 'Case Name',
-    editableAfterCreate: false,
   },
 
   description: {
     name: 'description',
     label: 'Description',
-    editableAfterCreate: true,
-    editableByOwner: true,
+    editable: { owner: true },
     inputType: 'textarea',
   },
 
   compset: {
     name: 'compset',
     label: 'Compset',
-    editableAfterCreate: false,
+    editable: { owner: true },
   },
 
   compsetAlias: {
     name: 'compsetAlias',
     label: 'Compset Alias',
-    editableAfterCreate: false,
+    editable: { owner: true },
   },
 
   gridName: {
     name: 'gridName',
     label: 'Grid Name',
-    editableAfterCreate: false,
+    editable: { owner: true },
   },
 
   gridResolution: {
     name: 'gridResolution',
     label: 'Grid Resolution',
-    editableAfterCreate: false,
+    editable: { owner: true },
   },
 
   parentSimulationId: {
     name: 'parentSimulationId',
     label: 'Parent Simulation ID',
-    editableAfterCreate: true,
-    editableByOwner: true,
+    editable: { owner: true },
   },
 
   // -------------------- Model Setup / Context --------------------
   simulationType: {
     name: 'simulationType',
     label: 'Simulation Type',
-    editableAfterCreate: false,
     inputType: 'select',
     options: [
       { value: 'production', label: 'Production' },
@@ -121,8 +113,7 @@ export const SIMULATION_FIELDS: Record<SimulationFieldName, SimulationFieldDef> 
   status: {
     name: 'status',
     label: 'Status',
-    editableAfterCreate: true,
-    editableByAdmin: true,
+    editable: { owner: true }, // owner-as-admin policy
     inputType: 'select',
     options: [
       { value: 'created', label: 'Created' },
@@ -136,96 +127,85 @@ export const SIMULATION_FIELDS: Record<SimulationFieldName, SimulationFieldDef> 
   campaignId: {
     name: 'campaignId',
     label: 'Campaign ID',
-    editableAfterCreate: true,
-    editableByOwner: true,
+    editable: { owner: true },
   },
 
   experimentTypeId: {
     name: 'experimentTypeId',
     label: 'Experiment Type ID',
-    editableAfterCreate: true,
-    editableByOwner: true,
+    editable: { owner: true },
   },
 
   initializationType: {
     name: 'initializationType',
     label: 'Initialization Type',
-    editableAfterCreate: false,
+    editable: { owner: true },
   },
 
   groupName: {
     name: 'groupName',
     label: 'Group Name',
-    editableAfterCreate: true,
-    editableByOwner: true,
+    editable: { owner: true },
   },
 
   // -------------------- Timeline --------------------
   machineId: {
     name: 'machineId',
     label: 'Machine',
-    editableAfterCreate: false,
     inputType: 'select',
+    // intentionally immutable for provenance
   },
 
   simulationStartDate: {
     name: 'simulationStartDate',
     label: 'Simulation Start Date',
-    editableAfterCreate: false,
     inputType: 'date',
   },
 
   simulationEndDate: {
     name: 'simulationEndDate',
     label: 'Simulation End Date',
-    editableAfterCreate: true,
-    editableByOwner: true,
+    editable: { owner: true },
     inputType: 'date',
   },
 
   runStartDate: {
     name: 'runStartDate',
     label: 'Run Start Date',
-    editableAfterCreate: false,
     inputType: 'date',
   },
 
   runEndDate: {
     name: 'runEndDate',
     label: 'Run End Date',
-    editableAfterCreate: false,
     inputType: 'date',
   },
 
   compiler: {
     name: 'compiler',
     label: 'Compiler',
-    editableAfterCreate: true,
-    editableByOwner: true,
+    editable: { owner: true },
   },
 
   // -------------------- Metadata --------------------
   keyFeatures: {
     name: 'keyFeatures',
     label: 'Key Features',
-    editableAfterCreate: true,
-    editableByOwner: true,
+    editable: { owner: true },
     inputType: 'textarea',
   },
 
   knownIssues: {
     name: 'knownIssues',
     label: 'Known Issues',
-    editableAfterCreate: true,
-    editableByOwner: true,
+    editable: { owner: true },
     inputType: 'textarea',
   },
 
   notesMarkdown: {
     name: 'notesMarkdown',
     label: 'Notes',
-    editableAfterCreate: true,
-    editableByOwner: true,
+    editable: { owner: true },
     inputType: 'textarea',
   },
 
@@ -233,38 +213,33 @@ export const SIMULATION_FIELDS: Record<SimulationFieldName, SimulationFieldDef> 
   gitRepositoryUrl: {
     name: 'gitRepositoryUrl',
     label: 'Git Repository URL',
-    editableAfterCreate: true,
-    editableByOwner: true,
+    editable: { owner: true },
     inputType: 'url',
   },
 
   gitBranch: {
     name: 'gitBranch',
     label: 'Git Branch',
-    editableAfterCreate: true,
-    editableByOwner: true,
+    editable: { owner: true },
   },
 
   gitTag: {
     name: 'gitTag',
     label: 'Git Tag',
-    editableAfterCreate: true,
-    editableByOwner: true,
+    editable: { owner: true },
   },
 
   gitCommitHash: {
     name: 'gitCommitHash',
     label: 'Git Commit Hash',
-    editableAfterCreate: true,
-    editableByOwner: true,
+    editable: { owner: true },
   },
 
   // -------------------- Misc --------------------
   extra: {
     name: 'extra',
     label: 'Extra Metadata',
-    editableAfterCreate: true,
-    editableByOwner: true,
+    editable: { owner: true },
     inputType: 'textarea',
   },
 
@@ -272,35 +247,30 @@ export const SIMULATION_FIELDS: Record<SimulationFieldName, SimulationFieldDef> 
   id: {
     name: 'id',
     label: 'Simulation ID',
-    editableAfterCreate: false,
     system: true,
   },
 
   createdAt: {
     name: 'createdAt',
     label: 'Created At',
-    editableAfterCreate: false,
     system: true,
   },
 
   updatedAt: {
     name: 'updatedAt',
     label: 'Last Updated At',
-    editableAfterCreate: false,
     system: true,
   },
 
   createdBy: {
     name: 'createdBy',
     label: 'Created By',
-    editableAfterCreate: false,
     system: true,
   },
 
   lastUpdatedBy: {
     name: 'lastUpdatedBy',
     label: 'Last Updated By',
-    editableAfterCreate: false,
     system: true,
   },
 };
@@ -314,10 +284,9 @@ export function canEditSimulationField(
   field: SimulationFieldDef,
   ctx: { isOwner: boolean; isAdmin: boolean },
 ): boolean {
-  if (field.system) return false;
-  if (!field.editableAfterCreate) return false;
-  if (field.editableByAdmin && ctx.isAdmin) return true;
-  if (field.editableByOwner && ctx.isOwner) return true;
+  if (!field.editable) return false;
+  if (field.editable.admin && ctx.isAdmin) return true;
+  if (field.editable.owner && ctx.isOwner) return true;
 
   return false;
 }
