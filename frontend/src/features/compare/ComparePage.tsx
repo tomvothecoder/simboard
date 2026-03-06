@@ -32,7 +32,7 @@ export const ComparePage = ({
 
   const simHeaders = selectedSimulationIds.map((id) => {
     const sim = selectedSimulations.find((s) => s.id === id);
-    return sim?.caseName || id;
+    return sim?.executionId || id;
   });
   const [headers, setHeaders] = useState(simHeaders);
 
@@ -208,7 +208,9 @@ export const ComparePage = ({
 
   useEffect(() => {
     setHeaders(
-      selectedSimulationIds.map((id) => selectedSimulations.find((s) => s.id === id)?.caseName || id),
+      selectedSimulationIds.map(
+        (id) => selectedSimulations.find((s) => s.id === id)?.executionId || id,
+      ),
     );
     setOrder(selectedSimulationIds.map((_, i) => i));
   }, [selectedSimulationIds, selectedSimulations]);
@@ -390,18 +392,23 @@ export const ComparePage = ({
                         </svg>
                       </span>
                       {/* Sim name clickable */}
-                      <a
-                        href={`/simulations/${selectedSimulationIds[colIdx]}`}
-                        className="text-lg font-semibold text-blue-700 hover:underline transition"
-                        tabIndex={0}
-                        title={`Go to details for ${headers[colIdx]}`}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          navigate(`/simulations/${selectedSimulationIds[colIdx]}`);
-                        }}
-                      >
-                        {headers[colIdx]}
-                      </a>
+                      <div className="flex flex-col items-center">
+                        <a
+                          href={`/simulations/${selectedSimulationIds[colIdx]}`}
+                          className="text-lg font-semibold text-blue-700 hover:underline transition"
+                          tabIndex={0}
+                          title={`Go to details for ${headers[colIdx]}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            navigate(`/simulations/${selectedSimulationIds[colIdx]}`);
+                          }}
+                        >
+                          {headers[colIdx]}
+                        </a>
+                        <span className="text-xs text-muted-foreground">
+                          {getSimProp(selectedSimulationIds[colIdx], 'caseName', '')}
+                        </span>
+                      </div>
                     </div>
                     <button
                       type="button"
