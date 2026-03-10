@@ -1,12 +1,13 @@
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 import { LayoutGrid, Table } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { BrowseFiltersSidePanel } from '@/features/browse/components/BrowseFiltersSidePanel';
 import { SimulationResultCards } from '@/features/browse/components/SimulationResults/SimulationResultsCards';
 import { SimulationResultsTable } from '@/features/browse/components/SimulationResults/SimulationResultsTable';
+import { listCaseNames, listSimulations, SIMULATIONS_URL } from '@/features/simulations/api/api';
 import type { SimulationOut } from '@/types/index';
 
 // -------------------- Types & Interfaces --------------------
@@ -33,7 +34,6 @@ export interface FilterState {
 }
 
 interface BrowsePageProps {
-  simulations: SimulationOut[];
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
 }
@@ -62,15 +62,17 @@ const createEmptyFilters = (): FilterState => ({
 });
 
 export const BrowsePage = ({
-  simulations,
   selectedSimulationIds,
   setSelectedSimulationIds,
 }: BrowsePageProps) => {
   // -------------------- Router --------------------
-  const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedCaseName = searchParams.get('caseName') ?? '';
 
   // -------------------- Local State --------------------
+  const [simulations, setSimulations] = useState<SimulationOut[]>([]);
+  const [caseOptions, setCaseOptions] = useState<{ value: string; label: string }[]>([]);
   const [appliedFilters, setAppliedFilters] = useState<FilterState>(createEmptyFilters);
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
@@ -184,49 +186,126 @@ export const BrowsePage = ({
 
   // -------------------- Effects --------------------
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const next: Partial<FilterState> = {};
-    const arrayKeys: (keyof FilterState)[] = [
-      'campaign',
-      'experimentType',
-      'machineId',
-      'compset',
-      'gridName',
-      'simulationType',
-      'gitTag',
-      'status',
-    ];
+    let cancelled = false;
 
-    arrayKeys.forEach((key) => {
-      const value = params.get(key);
+    listCaseNames()
+      .then((names) => {
+        if (!cancelled) {
+          const options = names
+            .map((name) => ({ value: name, label: name }))
+            .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+          setCaseOptions(options);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCaseOptions([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const params = new URLSearchParams();
+
+    if (selectedCaseName) {
+      params.set('case_name', selectedCaseName);
+    }
+
+    const simulationsUrl = params.toString()
+      ? `${SIMULATIONS_URL}?${params.toString()}`
+      : SIMULATIONS_URL;
+
+    listSimulations(simulationsUrl)
+      .then((res) => {
+        if (!cancelled) setSimulations(res);
+      })
+      .catch(() => {
+        if (!cancelled) setSimulations([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCaseName]);
+
+  useEffect(() => {
+    const next: Partial<FilterState> = {};
+    const allFilterKeys = Object.keys(createEmptyFilters()) as (keyof FilterState)[];
+
+    allFilterKeys.forEach((key) => {
+      const value = searchParams.get(key);
       if (value !== null) {
-        // FIXME: Fix below eslint error with any (TS is being difficult).
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore: Type 'string | string[]' is not assignable to type '(string[] & string) | undefined'.
-        next[key] = arrayKeys.includes(key) ? (value.split(',') as string[]) : value;
+        // All FilterState values are string arrays.
+        next[key] = value.split(',') as string[];
       }
     });
 
     setAppliedFilters((prev) => ({ ...prev, ...next }));
-  }, [location.search]);
+  }, [searchParams]);
 
+  // Sync applied filters to URL via setSearchParams (single writer).
+  // Use a ref to avoid re-running this effect on every searchParams change.
+  const isInitialFilterSync = useRef(true);
   useEffect(() => {
-    const params = new URLSearchParams();
+    // Skip the initial render — filters are read FROM the URL on mount.
+    if (isInitialFilterSync.current) {
+      isInitialFilterSync.current = false;
+      return;
+    }
 
-    Object.entries(appliedFilters).forEach(([key, value]) => {
-      if (Array.isArray(value) && value.length) {
-        params.set(key, value.join(','));
-      } else if (typeof value === 'string' && value) {
-        params.set(key, value);
-      }
-    });
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
 
-    navigate({ search: params.toString() }, { replace: true });
-  }, [appliedFilters, navigate]);
+        // Preserve caseName (managed by handleCaseNameChange).
+        const filterKeys = Object.keys(createEmptyFilters()) as (keyof FilterState)[];
+
+        for (const key of filterKeys) {
+          const value = appliedFilters[key];
+          if (Array.isArray(value) && value.length) {
+            next.set(key, value.join(','));
+          } else if (typeof value === 'string' && value) {
+            next.set(key, value);
+          } else {
+            next.delete(key);
+          }
+        }
+
+        return next;
+      },
+      { replace: true },
+    );
+  }, [appliedFilters, setSearchParams]);
 
   // -------------------- Handlers --------------------
+  const handleCaseNameChange = (caseName: string) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (caseName) {
+          next.set('caseName', caseName);
+        } else {
+          next.delete('caseName');
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  };
+
   const handleResetFilters = () => {
     setAppliedFilters(createEmptyFilters());
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('caseName');
+        return next;
+      },
+      { replace: true },
+    );
   };
 
   const handleCompareButtonClick = () => {
@@ -240,13 +319,16 @@ export const BrowsePage = ({
         <div className="flex flex-col md:flex-row gap-8">
           <div className="flex flex-row w-full gap-6">
             <div className="w-full md:w-[400px] min-w-0 md:min-w-[180px] overflow-y-auto max-h-screen">
-              <BrowseFiltersSidePanel
-                appliedFilters={appliedFilters}
-                availableFilters={availableFilters}
-                onChange={setAppliedFilters}
-                machineOptions={machineOptions}
-              />
-            </div>
+                <BrowseFiltersSidePanel
+                  appliedFilters={appliedFilters}
+                  availableFilters={availableFilters}
+                  onChange={setAppliedFilters}
+                  machineOptions={machineOptions}
+                  caseOptions={caseOptions}
+                  selectedCaseName={selectedCaseName}
+                  onCaseNameChange={handleCaseNameChange}
+                />
+              </div>
             <div className="flex-1 flex flex-col min-w-0">
               <header className="mb-3 px-2 mt-4 flex items-center justify-between">
                 <div>
@@ -380,9 +462,10 @@ export const BrowsePage = ({
                     }
                     return [];
                   })}
-                  {Object.values(appliedFilters).some((v) =>
-                    Array.isArray(v) ? v.length > 0 : !!v,
-                  ) && (
+                  {(selectedCaseName ||
+                    Object.values(appliedFilters).some((v) =>
+                      Array.isArray(v) ? v.length > 0 : !!v,
+                    )) && (
                     <button
                       type="button"
                       className="inline-flex items-center px-3 py-1 rounded-full bg-red-100 text-sm text-red-700 border border-red-300 ml-2"

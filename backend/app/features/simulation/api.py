@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.common.dependencies import get_database_session
@@ -55,6 +55,36 @@ def list_cases(db: Session = Depends(get_database_session)) -> list[CaseOut]:
     resp = [_case_to_out(c) for c in cases]
 
     return resp
+
+
+@case_router.get(
+    "/names",
+    response_model=list[str],
+    responses={
+        200: {"description": "List all case names."},
+        500: {"description": "Internal server error."},
+    },
+)
+def list_case_names(db: Session = Depends(get_database_session)) -> list[str]:
+    """Return a sorted list of all case names.
+
+    This lightweight endpoint avoids loading nested simulation data,
+    making it suitable for populating filter dropdowns.
+
+    Parameters
+    ----------
+    db : Session, optional
+        The database session dependency, by default provided by
+        `Depends(get_database_session)`.
+
+    Returns
+    -------
+    list[str]
+        Alphabetically sorted case names.
+    """
+    names = db.query(Case.name).order_by(Case.name).all()
+
+    return [n[0] for n in names]
 
 
 @case_router.get(
@@ -251,7 +281,17 @@ def create_simulation(
         500: {"description": "Internal server error."},
     },
 )
-def list_simulations(db: Session = Depends(get_database_session)):
+def list_simulations(
+    db: Session = Depends(get_database_session),
+    case_name: str | None = Query(
+        None,
+        description="Filter simulations by exact case name.",
+    ),
+    case_group: str | None = Query(
+        None,
+        description="Filter simulations by exact case group.",
+    ),
+):
     """
     Retrieve a list of simulations from the database, ordered by creation date
     in descending order.
@@ -261,6 +301,12 @@ def list_simulations(db: Session = Depends(get_database_session)):
     db : Session, optional
         The database session dependency, by default obtained via
         `Depends(get_database_session)`.
+    case_name : str, optional
+        If provided, only simulations whose associated case name matches
+        exactly will be returned.
+    case_group : str, optional
+        If provided, only simulations whose associated case group matches
+        exactly will be returned.
 
     Returns
     -------
@@ -268,17 +314,19 @@ def list_simulations(db: Session = Depends(get_database_session)):
         A list of `Simulation` objects, ordered by their `created_at` timestamp
         in descending order.
     """
-    sims = (
-        db.query(Simulation)
-        .options(
-            joinedload(Simulation.case),
-            joinedload(Simulation.machine),
-            selectinload(Simulation.artifacts),
-            selectinload(Simulation.links),
-        )
-        .order_by(Simulation.created_at.desc())
-        .all()
+    query = db.query(Simulation).options(
+        joinedload(Simulation.case),
+        joinedload(Simulation.machine),
+        selectinload(Simulation.artifacts),
+        selectinload(Simulation.links),
     )
+
+    if case_name is not None:
+        query = query.filter(Simulation.case.has(name=case_name))
+    if case_group is not None:
+        query = query.filter(Simulation.case.has(case_group=case_group))
+
+    sims = query.order_by(Simulation.created_at.desc()).all()
     return [_simulation_to_out(s) for s in sims]
 
 
