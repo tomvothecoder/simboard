@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: simboard-backend-migrate
+  namespace: simboard
+  labels:
+    app: simboard-backend-migrate
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: simboard-backend-migrate
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: registry-nersc
+      containers:
+        - name: simboard-backend-migrate
+          image: registry.nersc.gov/e3sm/simboard/backend:<tag>
+          imagePullPolicy: Always
+          args: ["migrate"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: simboard-backend-db
+                  key: migration_database_url
+            - name: MIGRATION_LOCK_TIMEOUT_SECONDS
+              value: "300"
+          securityContext:
+            runAsNonRoot: false
+            readOnlyRootFilesystem: false
+            privileged: false
+            allowPrivilegeEscalation: false
+
+# Usage:
+# 1) Set image tag (examples: dev, sha-<commit>, 1.2.3).
+# 2) Recreate job before rerunning with a new tag:
+#    kubectl -n simboard delete job simboard-backend-migrate --ignore-not-found
+#    kubectl -n simboard apply -f deploy/spin/backend-migrate-job.yaml

@@ -11,6 +11,7 @@ Complete reference for CI/CD pipelines and NERSC Spin deployments.
 - [Image Tagging Strategy](#image-tagging-strategy)
 - [Development Deployment](#development-deployment)
 - [Production Release Process](#production-release-process)
+- [Database Migrations](#database-migrations)
 - [Rollback Procedure](#rollback-procedure)
 - [Manual Builds](#manual-builds)
 - [Troubleshooting](#troubleshooting)
@@ -244,6 +245,8 @@ Update the image tags in the [Rancher UI](https://rancher2.spin.nersc.gov/dashbo
 4. Set **Pull Policy** to `IfNotPresent`
 5. Click **Save** — Rancher will roll out the new version
 
+For backend releases, run the dedicated migration job to completion before saving backend deployment changes. See [Database Migrations](#database-migrations).
+
 ### Step 5: Verify Production
 
 1. In Rancher, check that pods are **Running** under **Workloads → Pods** in the prod namespace
@@ -254,19 +257,47 @@ Update the image tags in the [Rancher UI](https://rancher2.spin.nersc.gov/dashbo
 
 ## Database Migrations
 
-Alembic database migrations run **automatically** when the backend container starts. No manual migration step is required during deployment.
+Database migrations are executed by a dedicated workload (`migrate` mode), not on backend startup.
 
-### Startup Sequence
+### Runtime Modes
 
-1. **Database readiness check** — the container waits (up to 30 seconds) for the PostgreSQL server to accept connections using `pg_isready`.
-2. **`alembic upgrade head`** — applies any pending migrations. If the database is already up to date, this is a no-op.
-3. **Application start** — Uvicorn launches only after migrations succeed.
+- `serve`: starts Uvicorn only. It never runs Alembic migrations.
+- `migrate`: requires `DATABASE_URL`, waits for DB readiness (`pg_isready`), acquires a Postgres advisory lock, runs `uv run alembic upgrade head`, and exits with status `0` (success) or non-zero (failure).
 
-If either the database readiness check or migration step fails, the container exits immediately and does **not** start the application.
+### Spin Workloads
 
-### Concurrency Note
+Reference manifests:
 
-The current deployment assumes a **single backend replica**. If horizontal scaling is introduced, migration execution should be separated into a one-time init container or deployment job to avoid race conditions.
+- [`deploy/spin/backend-workloads.yaml`](../../deploy/spin/backend-workloads.yaml)
+- [`deploy/spin/frontend-workloads.yaml`](../../deploy/spin/frontend-workloads.yaml)
+- [`deploy/spin/db-workloads.yaml`](../../deploy/spin/db-workloads.yaml)
+- [`deploy/spin/lb-workloads.yaml`](../../deploy/spin/lb-workloads.yaml)
+
+- Backend service/deployment baseline is defined for in-cluster API routing (`backend` on `8000`).
+- Backend Deployment uses `args: ["serve"]`.
+- Migration Job uses the same backend image with `args: ["migrate"]`.
+- Frontend service/deployment baseline is defined for UI routing (`frontend` on `80`).
+- Frontend Deployment uses the frontend image default CMD (no explicit args).
+- DB service/deployment baseline is defined for in-cluster Postgres (`db`).
+- Ingress baseline (`lb`) terminates TLS via `simboard-tls-cert` and routes frontend/backend hosts.
+- Backend runtime/OAuth env values are sourced from secrets in the baseline manifests.
+- The migration job can use a privileged DB credential (`migration_database_url`) while the backend uses an app credential (`app_database_url`).
+
+### Deployment Order (Required)
+
+1. Deploy or update the migration job image tag.
+2. Run migration job and wait for `Complete`.
+3. Only after migration success, roll out backend deployment with the same image tag.
+
+If the migration job fails, do not roll out backend pods to that image tag until the failure is resolved.
+
+### Concurrency Guard
+
+The migration runner enforces singleton execution with a Postgres advisory lock. If a second runner starts while one is active, it waits for lock availability (up to `MIGRATION_LOCK_TIMEOUT_SECONDS`, default `300`) and fails if timeout is reached.
+
+### Rollback Caveat
+
+Rolling back the backend container image does not roll back database schema automatically. Use backward-compatible migrations (expand/contract pattern), and use a separate, explicit rollback migration only when needed.
 
 ## Rollback Procedure
 

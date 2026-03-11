@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: List
+items:
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: simboard-tls-cert
+    type: kubernetes.io/tls
+    stringData:
+      tls.crt: |
+        -----BEGIN CERTIFICATE-----
+        REPLACE_WITH_CERTIFICATE_PEM
+        -----END CERTIFICATE-----
+      tls.key: |
+        -----BEGIN PRIVATE KEY-----
+        REPLACE_WITH_PRIVATE_KEY_PEM
+        -----END PRIVATE KEY-----
+  - apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: lb
+      annotations:
+        field.cattle.io/description: Ingress for SimBoard
+    spec:
+      ingressClassName: nginx
+      rules:
+        - host: lb.simboard.development.svc.spin.nersc.org
+        - host: simboard-dev.e3sm.org
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: frontend
+                    port:
+                      number: 80
+        - host: simboard-dev-api.e3sm.org
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: backend
+                    port:
+                      number: 8000
+      tls:
+        - secretName: simboard-tls-cert
+          hosts:
+            - simboard-dev-api.e3sm.org
+            - simboard-dev.e3sm.org
+            - lb.simboard.development.svc.spin.nersc.org
+
+# Notes:
+# - Keep cert material in a secret manager and inject into this secret at deploy time.
+# - `field.cattle.io/publicEndpoints` is Rancher-generated and should not be committed.

@@ -1,60 +1,55 @@
 #!/usr/bin/env sh
 set -e
 
-echo "ENV=$ENV"
+MODE="${1:-serve}"
 
-# -----------------------------------------------------------
-# Require DATABASE_URL
-# -----------------------------------------------------------
-if [ -z "${DATABASE_URL}" ]; then
-    echo "❌ DATABASE_URL is required but not set"
-    exit 1
-fi
-
-# -----------------------------------------------------------
-# Database readiness check
-# -----------------------------------------------------------
-# Strip SQLAlchemy driver suffix (e.g., +psycopg, +asyncpg) for pg_isready
-PG_URL=$(echo "${DATABASE_URL}" | sed 's|^\(postgresql\)+[a-z]*://|\1://|')
-
-echo "⏳ Waiting for database..."
-retries=0
-max_retries=30
-until pg_isready -d "${PG_URL}" -q; do
-    retries=$((retries + 1))
-    if [ "$retries" -ge "$max_retries" ]; then
-        echo "❌ Database not reachable after ${max_retries} attempts"
+require_database_url() {
+    if [ -z "${DATABASE_URL}" ]; then
+        echo "error: DATABASE_URL is required but not set"
         exit 1
     fi
-    sleep 1
-done
-echo "✅ Database is ready"
+}
 
-# -----------------------------------------------------------
-# Run Alembic migrations
-# -----------------------------------------------------------
-echo "🔄 Running Alembic migrations..."
-if ! uv run alembic upgrade head; then
-    echo "❌ Alembic migrations failed"
-    exit 1
-fi
-echo "✅ Alembic migrations complete"
+normalize_pg_url() {
+    db_url="$1"
+    case "${db_url}" in
+        postgresql+*://*)
+            echo "postgresql://${db_url#*://}"
+            ;;
+        *)
+            echo "${db_url}"
+            ;;
+    esac
+}
 
-# -----------------------------------------------------------
-# Start application
-# -----------------------------------------------------------
-if [ "$ENV" = "production" ]; then
-    echo "🚀 Starting SimBoard backend (production mode)..."
-    # In production, HTTPS is expected to be handled by a reverse proxy (e.g., Traefik).
-    # Uvicorn is started without SSL options here; do not enable HTTPS at the app layer in production.
-    exec uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
-else
-    echo "⚙️ Starting SimBoard backend (development mode with HTTPS + autoreload)..."
+wait_for_database() {
+    pg_url="$(normalize_pg_url "${DATABASE_URL}")"
+    retries=0
+    max_retries="${DB_READY_MAX_RETRIES:-30}"
+    retry_sleep_seconds="${DB_READY_RETRY_INTERVAL_SECONDS:-1}"
 
-    # Check for dev certs via env vars
+    echo "db readiness: waiting for postgres"
+    until pg_isready -d "${pg_url}" -q; do
+        retries=$((retries + 1))
+        if [ "${retries}" -ge "${max_retries}" ]; then
+            echo "db readiness: failed after ${max_retries} attempts"
+            exit 1
+        fi
+        sleep "${retry_sleep_seconds}"
+    done
+    echo "db readiness: postgres is ready"
+}
+
+start_server() {
+    if [ "${ENV}" = "production" ]; then
+        echo "serve: starting backend in production mode"
+        # In production, HTTPS is expected to be handled by a reverse proxy.
+        exec uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+    fi
+
+    echo "serve: starting backend in development mode"
     if [ -z "${SSL_KEYFILE}" ] || [ -z "${SSL_CERTFILE}" ]; then
-        echo "❌ Missing SSL_KEYFILE or SSL_CERTFILE environment variables"
-        echo "   Set SSL_KEYFILE and SSL_CERTFILE environment variables"
+        echo "error: SSL_KEYFILE and SSL_CERTFILE are required in development mode"
         exit 1
     fi
 
@@ -64,4 +59,24 @@ else
         --ssl-keyfile "${SSL_KEYFILE}" \
         --ssl-certfile "${SSL_CERTFILE}" \
         --reload
-fi
+}
+
+run_migrations() {
+    echo "migrate: starting migration workflow"
+    require_database_url
+    wait_for_database
+    uv run python -m app.scripts.db.run_migrations
+}
+
+case "${MODE}" in
+    serve)
+        start_server
+        ;;
+    migrate)
+        run_migrations
+        ;;
+    *)
+        echo "error: unknown mode '${MODE}'. expected 'serve' or 'migrate'"
+        exit 2
+        ;;
+esac

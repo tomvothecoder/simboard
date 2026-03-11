@@ -13,6 +13,7 @@ Scripts are organized by domain:
 ```
 scripts/
 ├── db/
+│   ├── run_migrations.py
 │   ├── seed.py
 │   ├── rollback_seed.py
 │   └── simulations.json
@@ -23,7 +24,7 @@ scripts/
 
 ### Domains
 
-- **db/** — Database seeding and rollback utilities
+- **db/** — Database migration, seeding, and rollback utilities
 - **users/** — Administrative and service account management
 
 ---
@@ -37,6 +38,7 @@ Example:
 ```bash
 python -m app.scripts.db.seed
 python -m app.scripts.db.rollback_seed
+python -m app.scripts.db.run_migrations
 python -m app.scripts.users.create_admin_account
 ```
 

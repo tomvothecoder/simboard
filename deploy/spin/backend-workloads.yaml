@@ -1,0 +1,160 @@
+apiVersion: v1
+kind: List
+items:
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: backend
+      labels:
+        app: simboard-backend
+    spec:
+      selector:
+        app: simboard-backend
+      ports:
+        - name: fastapi
+          protocol: TCP
+          port: 8000
+          targetPort: 8000
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: backend
+      labels:
+        app: simboard-backend
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: simboard-backend
+      template:
+        metadata:
+          labels:
+            app: simboard-backend
+        spec:
+          imagePullSecrets:
+            - name: registry-nersc
+          containers:
+            - name: backend
+              image: registry.nersc.gov/e3sm/simboard/backend:<tag>
+              imagePullPolicy: Always
+              args: ["serve"]
+              ports:
+                - containerPort: 8000
+                  name: fastapi
+                  protocol: TCP
+              env:
+                - name: ENV
+                  value: production
+                - name: ENVIRONMENT
+                  value: production
+                - name: PORT
+                  value: "8000"
+                - name: FRONTEND_ORIGIN
+                  valueFrom:
+                    secretKeyRef:
+                      name: simboard-backend-runtime
+                      key: frontend_origin
+                - name: FRONTEND_AUTH_REDIRECT_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: simboard-backend-runtime
+                      key: frontend_auth_redirect_url
+                - name: FRONTEND_ORIGINS
+                  valueFrom:
+                    secretKeyRef:
+                      name: simboard-backend-runtime
+                      key: frontend_origins
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: simboard-backend-db
+                      key: app_database_url
+                - name: TEST_DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: simboard-backend-db
+                      key: test_database_url
+                - name: GITHUB_CLIENT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: simboard-backend-oauth
+                      key: client_id
+                - name: GITHUB_CLIENT_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: simboard-backend-oauth
+                      key: client_secret
+                - name: GITHUB_REDIRECT_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: simboard-backend-oauth
+                      key: redirect_url
+                - name: GITHUB_STATE_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: simboard-backend-oauth
+                      key: state_secret_key
+                - name: COOKIE_NAME
+                  value: simboard_auth
+                - name: COOKIE_SECURE
+                  value: "true"
+                - name: COOKIE_HTTPONLY
+                  value: "true"
+                - name: COOKIE_SAMESITE
+                  value: none
+                - name: COOKIE_MAX_AGE
+                  value: "3600"
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  add:
+                    - DAC_OVERRIDE
+                    - NET_BIND_SERVICE
+                  drop:
+                    - ALL
+                privileged: false
+                readOnlyRootFilesystem: false
+                runAsNonRoot: false
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: simboard-backend-migrate
+      labels:
+        app: simboard-backend-migrate
+    spec:
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels:
+            app: simboard-backend-migrate
+        spec:
+          imagePullSecrets:
+            - name: registry-nersc
+          restartPolicy: Never
+          containers:
+            - name: migrate
+              image: registry.nersc.gov/e3sm/simboard/backend:<tag>
+              imagePullPolicy: Always
+              args: ["migrate"]
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: simboard-backend-db
+                      key: migration_database_url
+                - name: MIGRATION_LOCK_TIMEOUT_SECONDS
+                  value: "300"
+              # Optional explicit lock key override:
+              # - name: MIGRATION_LOCK_KEY
+              #   value: "810001"
+
+# Notes:
+# - Use the same backend image tag for both Deployment and Job during rollout.
+# - Set <tag> to the desired image tag (e.g., dev, sha-<commit>, 1.2.3).
+# - If you do not use separate DB credentials yet, set both keys in the same
+#   secret to identical values.
+# - Required backend secrets:
+#   - simboard-backend-db: app_database_url, migration_database_url, test_database_url
+#   - simboard-backend-runtime: frontend_origin, frontend_auth_redirect_url, frontend_origins
+#   - simboard-backend-oauth: client_id, client_secret, redirect_url, state_secret_key
