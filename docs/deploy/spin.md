@@ -40,6 +40,37 @@ No workload manifests are versioned under `deploy/spin/`.
 | Service selector label | `app=simboard-backend` |
 | Service port | `8000/TCP` (target `8000`) |
 
+### Mounting NERSC E3SM Performance Archive
+
+To mount the E3SM performance archive into backend pods, configure a bind mount in Rancher:
+
+| Rancher field | Value |
+|---|---|
+| Scope | Backend Deployment (`backend`) |
+| Section | `Storage` |
+| Volume type | `Bind-Mount` |
+| Volume name | `performance-archive` |
+| Path on node | `/global/cfs/cdirs/e3sm/performance_archive` |
+
+Then mount that volume into the backend container (and only other containers that need it):
+
+| Rancher field | Value |
+|---|---|
+| Scope | Backend container (`backend`) |
+| Section | `Storage` |
+| Volume | `performance-archive` |
+| Mount path (recommended) | `/global/cfs/cdirs/e3sm/performance_archive` |
+| Read only | `true` (recommended) |
+
+Security context requirements for NERSC global file system (NGF/CFS) mounts:
+
+- Set numeric `runAsUser` at pod/container level.
+- If `runAsGroup` is set, also set `runAsUser`.
+- Set `runAsGroup` and `fsGroup` to the appropriate numeric group ID.
+- Keep Linux capabilities minimal (`drop: ALL`; only add what is required).
+
+Source: [NERSC Spin Storage - NERSC Global File Systems](https://docs.nersc.gov/services/spin/storage/#nersc-global-file-systems).
+
 ### Frontend Deployment (`frontend`)
 
 | Rancher field | Value |
