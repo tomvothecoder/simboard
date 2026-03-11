@@ -47,10 +47,11 @@ To mount the E3SM performance archive into backend pods, configure a bind mount 
 | Rancher field | Value |
 |---|---|
 | Scope | Backend Deployment (`backend`) |
-| Section | `Storage` |
+| Section | `Pod` -> `Storage` |
 | Volume type | `Bind-Mount` |
 | Volume name | `performance-archive` |
 | Path on node | `/global/cfs/cdirs/e3sm/performance_archive` |
+| The Path on the Node must be | `An existing directory` |
 
 Then mount that volume into the backend container (and only other containers that need it):
 
