@@ -44,7 +44,7 @@ start_server() {
     if [ "${ENV}" = "production" ]; then
         echo "serve: starting backend in production mode"
         # In production, HTTPS is expected to be handled by a reverse proxy.
-        exec uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+        exec uvicorn app.main:app --host 0.0.0.0 --port 8000
     fi
 
     echo "serve: starting backend in development mode"
@@ -53,7 +53,7 @@ start_server() {
         exit 1
     fi
 
-    exec uv run uvicorn app.main:app \
+    exec uvicorn app.main:app \
         --host 0.0.0.0 \
         --port 8000 \
         --ssl-keyfile "${SSL_KEYFILE}" \
@@ -65,7 +65,7 @@ run_migrations() {
     echo "migrate: starting migration workflow"
     require_database_url
     wait_for_database
-    uv run python -m app.scripts.db.run_migrations
+    exec python -m app.scripts.db.run_migrations
 }
 
 case "${MODE}" in
