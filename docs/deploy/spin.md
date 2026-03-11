@@ -1,6 +1,6 @@
-# NERSC Spin Workloads (Backend Migrations First)
+# NERSC Spin Workloads (Backend InitContainer Migrations)
 
-This document defines the backend rollout order for NERSC Spin with a dedicated migrations workload, plus baseline frontend, database, and ingress workload configuration.
+This runbook defines the NERSC Spin workload baseline and backend rollout flow using an initContainer for automatic Alembic migrations.
 This runbook uses the Rancher UI as the primary deployment workflow.
 
 ## Rancher UI Configs
@@ -8,7 +8,6 @@ This runbook uses the Rancher UI as the primary deployment workflow.
 Configure these workloads in Rancher to match:
 
 - [`deploy/spin/backend-workloads.yaml`](../../deploy/spin/backend-workloads.yaml)
-- [`deploy/spin/backend-migrate-job.yaml`](../../deploy/spin/backend-migrate-job.yaml)
 - [`deploy/spin/frontend-workloads.yaml`](../../deploy/spin/frontend-workloads.yaml)
 - [`deploy/spin/db-workloads.yaml`](../../deploy/spin/db-workloads.yaml)
 - [`deploy/spin/lb-workloads.yaml`](../../deploy/spin/lb-workloads.yaml)
@@ -21,12 +20,17 @@ Configure these workloads in Rancher to match:
 | Name | `backend` |
 | Labels | `app=simboard-backend` |
 | Replicas | `1` |
-| Container name | `backend` |
-| Image | `registry.nersc.gov/e3sm/simboard/backend:<tag>` |
-| Pull policy | `Always` |
 | Image pull secret | `registry-nersc` |
-| Command | leave empty (use image entrypoint) |
-| Arguments | `serve` |
+| Init container name | `migrate` |
+| Init container image | `registry.nersc.gov/e3sm/simboard/backend:<tag>` |
+| Init container command | `sh -c` |
+| Init container args | `test -n "$DATABASE_URL" \\|\\| { echo "DATABASE_URL is required"; exit 1; }; alembic upgrade head` |
+| Init env from secret | `DATABASE_URL` from secret `simboard-backend-db`, key `app_database_url` |
+| App container name | `backend` |
+| App container image | `registry.nersc.gov/e3sm/simboard/backend:<tag>` |
+| App pull policy | `Always` |
+| App command | leave empty (use image entrypoint) |
+| App arguments | `serve` |
 | Port | `8000/TCP` |
 | Environment variable | `ENV=production`, `ENVIRONMENT=production`, `PORT=8000` |
 | Environment variable from secret | `FRONTEND_ORIGIN` from secret `simboard-backend-runtime`, key `frontend_origin` |
@@ -49,29 +53,6 @@ Configure these workloads in Rancher to match:
 | Service name | `backend` |
 | Service selector label | `app=simboard-backend` |
 | Service port | `8000/TCP` (target `8000`) |
-
-### Migration Job (`simboard-backend-migrate`)
-
-| Rancher field | Value |
-|---|---|
-| Workload type | `Job` |
-| Name | `simboard-backend-migrate` |
-| Labels | `app=simboard-backend-migrate` |
-| Backoff limit | `0` |
-| TTL seconds after finished | `3600` |
-| Restart policy | `Never` |
-| Container name | `migrate` |
-| Image | `registry.nersc.gov/e3sm/simboard/backend:<tag>` |
-| Pull policy | `Always` |
-| Command | leave empty (use image entrypoint) |
-| Arguments | `migrate` |
-| Environment variable from secret | `DATABASE_URL` from secret `simboard-backend-db`, key `migration_database_url` |
-| Environment variable | `MIGRATION_LOCK_TIMEOUT_SECONDS=300` |
-| Optional environment variable | `MIGRATION_LOCK_KEY=<integer lock key>` |
-
-Reusable per-tag template: [`deploy/spin/backend-migrate-job.yaml`](../../deploy/spin/backend-migrate-job.yaml) (set `backend:<tag>` before running).
-
-Use the same backend image tag in both workloads during rollout.
 
 ### Frontend Deployment (`frontend`)
 
@@ -154,13 +135,10 @@ Use the same backend image tag in both workloads during rollout.
 
 ## Required Secrets
 
-Create a Kubernetes secret (example: `simboard-backend-db`) with:
+Create a backend DB secret (example: `simboard-backend-db`) with:
 
-- `app_database_url`: app credential used by backend deployment
-- `migration_database_url`: migration credential with schema-altering privileges
+- `app_database_url`: backend runtime DB URL
 - `test_database_url`: backend test URL required by runtime settings
-
-If separate DB users are not available yet, both keys can point to the same connection URL.
 
 Create a backend runtime secret (example: `simboard-backend-runtime`) with:
 
@@ -189,26 +167,19 @@ Create a TLS secret (example: `simboard-tls-cert`) with:
 
 1. Open the [Rancher UI](https://rancher2.spin.nersc.gov/dashboard/home) and select the target namespace.
 2. Ensure DB service/deployment (`db`) are healthy in **Service Discovery → Services** and **Workloads → Deployments**.
-3. Navigate to **Workloads → Jobs** and open `simboard-backend-migrate`.
-4. Ensure the job image uses the target backend tag, then run or recreate the job so that migration executes with that tag.
-5. Wait for job status **Completed**.
-6. Review migration logs from **⋮ → View Logs** on `simboard-backend-migrate`.
-7. After migration success, navigate to **Workloads → Deployments**, open `backend`, and update/redeploy it with the same image tag.
-8. Verify rollout success by confirming the deployment is healthy and pods are **Running** under **Workloads → Pods**.
-9. Verify ingress routing under **Service Discovery → Ingresses** for `lb` and confirm both frontend and backend hosts resolve via HTTPS.
+3. Update/redeploy backend deployment with the target backend image tag.
+4. Watch backend pod init container logs (`migrate`) in Rancher to confirm migration success.
+5. Verify backend deployment health and pod status under **Workloads → Pods**.
+6. Verify ingress routing under **Service Discovery → Ingresses** for `lb` and confirm both frontend and backend hosts resolve via HTTPS.
 
-Frontend deploys independently from backend migrations. For frontend releases, update/redeploy the `frontend` deployment in **Workloads → Deployments** with the target frontend image tag.
+Frontend deploys independently from backend migration initContainer. For frontend releases, update/redeploy the `frontend` deployment in **Workloads → Deployments** with the target frontend image tag.
 
 ## Failure Handling
 
-- If migration job status is **Failed** or logs show errors, do not roll out backend with that image tag.
-- Fix the migration issue and rerun the migration job in Rancher.
+- If backend init container `migrate` fails, the backend pod will not become Ready.
+- Fix database connectivity or migration issues, then redeploy backend.
 - Backend image rollback does not revert schema automatically; handle schema rollback explicitly via Alembic when required.
 
-## Concurrency Behavior
+## Concurrency Note
 
-Migration mode takes a Postgres advisory lock before running Alembic.
-
-- Only one migration runner can hold the lock at a time, even if multiple job runs are triggered in Rancher.
-- Waiting behavior is controlled by `MIGRATION_LOCK_TIMEOUT_SECONDS` (default `300`).
-- Optional `MIGRATION_LOCK_KEY` can override the deterministic lock key.
+Migrations run once per new backend pod via initContainer. With more than one replica, multiple pods can attempt migrations during rollout. Keep rollout strategy/replica count aligned with your migration safety model.

@@ -245,7 +245,7 @@ Update the image tags in the [Rancher UI](https://rancher2.spin.nersc.gov/dashbo
 4. Set **Pull Policy** to `IfNotPresent`
 5. Click **Save** — Rancher will roll out the new version
 
-For backend releases, run the dedicated migration job to completion before saving backend deployment changes. See [Database Migrations](#database-migrations).
+For backend releases, migrations run automatically in a backend initContainer during rollout. See [Database Migrations](#database-migrations).
 
 ### Step 5: Verify Production
 
@@ -257,12 +257,13 @@ For backend releases, run the dedicated migration job to completion before savin
 
 ## Database Migrations
 
-Database migrations are executed by a dedicated workload (`migrate` mode), not on backend startup.
+Database migrations are executed by a backend Deployment initContainer during rollout, not on backend app startup.
 
-### Runtime Modes
+### Runtime Behavior
 
-- `serve`: starts Uvicorn only. It never runs Alembic migrations.
-- `migrate`: requires `DATABASE_URL`, waits for DB readiness (`pg_isready`), acquires a Postgres advisory lock, runs `uv run alembic upgrade head`, and exits with status `0` (success) or non-zero (failure).
+- Backend container runs in `serve` mode and does not run migrations at startup.
+- InitContainer runs before backend container start and executes:
+  - `test -n "$DATABASE_URL" || { echo "DATABASE_URL is required"; exit 1; }; alembic upgrade head`
 
 ### Spin Workloads
 
@@ -275,25 +276,25 @@ Reference manifests:
 
 - Backend service/deployment baseline is defined for in-cluster API routing (`backend` on `8000`).
 - Backend Deployment uses `args: ["serve"]`.
-- Migration Job uses the same backend image with `args: ["migrate"]`.
+- Backend Deployment includes initContainer `migrate` using the same backend image tag to run Alembic before app start.
 - Frontend service/deployment baseline is defined for UI routing (`frontend` on `80`).
 - Frontend Deployment uses the frontend image default CMD (no explicit args).
 - DB service/deployment baseline is defined for in-cluster Postgres (`db`).
 - Ingress baseline (`lb`) terminates TLS via `simboard-tls-cert` and routes frontend/backend hosts.
 - Backend runtime/OAuth env values are sourced from secrets in the baseline manifests.
-- The migration job can use a privileged DB credential (`migration_database_url`) while the backend uses an app credential (`app_database_url`).
+- InitContainer `DATABASE_URL` is sourced from the same DB secret reference used by backend runtime (`app_database_url`).
 
 ### Deployment Order (Required)
 
-1. Deploy or update the migration job image tag.
-2. Run migration job and wait for `Complete`.
-3. Only after migration success, roll out backend deployment with the same image tag.
+1. Roll out backend deployment with the target image tag.
+2. Wait for initContainer migration step to succeed.
+3. Confirm backend pods become `Running` and `Ready`.
 
-If the migration job fails, do not roll out backend pods to that image tag until the failure is resolved.
+If initContainer migration fails, backend pods will not become ready and rollout should be treated as failed.
 
-### Concurrency Guard
+### Concurrency Note
 
-The migration runner enforces singleton execution with a Postgres advisory lock. If a second runner starts while one is active, it waits for lock availability (up to `MIGRATION_LOCK_TIMEOUT_SECONDS`, default `300`) and fails if timeout is reached.
+InitContainers run per pod. If more than one backend pod is created simultaneously, migrations may execute concurrently. Keep rollout strategy and replica count aligned with migration safety expectations.
 
 ### Rollback Caveat
 
