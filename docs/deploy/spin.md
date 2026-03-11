@@ -20,7 +20,7 @@ No workload manifests are versioned under `deploy/spin/`.
 | Init container name | `migrate` |
 | Init container image | `registry.nersc.gov/e3sm/simboard/backend:<tag>` |
 | Init container command | `sh -c` |
-| Init container args | `test -n "$DATABASE_URL" \\|\\| { echo "DATABASE_URL is required"; exit 1; }; alembic upgrade head` |
+| Init container args | See canonical command below |
 | Init envFrom secret | `simboard-backend-env` |
 | App container name | `backend` |
 | App container image | `registry.nersc.gov/e3sm/simboard/backend:<tag>` |
@@ -30,6 +30,12 @@ No workload manifests are versioned under `deploy/spin/`.
 | Port | `8000/TCP` |
 | App envFrom secret | `simboard-backend-env` |
 | Container security context | `allowPrivilegeEscalation=false`, `privileged=false`, capabilities add `DAC_OVERRIDE,NET_BIND_SERVICE`, drop `ALL` |
+
+Canonical init container command/args to copy into Rancher:
+
+```sh
+sh -c 'test -n "$DATABASE_URL" || { echo "DATABASE_URL is required"; exit 1; }; alembic upgrade head'
+```
 
 ### Backend Service (`backend`)
 
