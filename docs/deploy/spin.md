@@ -5,12 +5,8 @@ This runbook uses the Rancher UI as the primary deployment workflow.
 
 ## Rancher UI Configs
 
-Configure these workloads in Rancher to match:
-
-- [`deploy/spin/backend-workloads.yaml`](../../deploy/spin/backend-workloads.yaml)
-- [`deploy/spin/frontend-workloads.yaml`](../../deploy/spin/frontend-workloads.yaml)
-- [`deploy/spin/db-workloads.yaml`](../../deploy/spin/db-workloads.yaml)
-- [`deploy/spin/lb-workloads.yaml`](../../deploy/spin/lb-workloads.yaml)
+This document is the source of truth for Spin workload settings managed in Rancher UI.
+No workload manifests are versioned under `deploy/spin/`.
 
 ### Backend Deployment (`backend`)
 
@@ -25,24 +21,14 @@ Configure these workloads in Rancher to match:
 | Init container image | `registry.nersc.gov/e3sm/simboard/backend:<tag>` |
 | Init container command | `sh -c` |
 | Init container args | `test -n "$DATABASE_URL" \\|\\| { echo "DATABASE_URL is required"; exit 1; }; alembic upgrade head` |
-| Init env from secret | `DATABASE_URL` from secret `simboard-backend-db`, key `app_database_url` |
+| Init envFrom secret | `simboard-backend-env` |
 | App container name | `backend` |
 | App container image | `registry.nersc.gov/e3sm/simboard/backend:<tag>` |
 | App pull policy | `Always` |
 | App command | leave empty (use image entrypoint) |
 | App arguments | `serve` |
 | Port | `8000/TCP` |
-| Environment variable | `ENV=production`, `ENVIRONMENT=production`, `PORT=8000` |
-| Environment variable from secret | `FRONTEND_ORIGIN` from secret `simboard-backend-runtime`, key `frontend_origin` |
-| Environment variable from secret | `FRONTEND_AUTH_REDIRECT_URL` from secret `simboard-backend-runtime`, key `frontend_auth_redirect_url` |
-| Environment variable from secret | `FRONTEND_ORIGINS` from secret `simboard-backend-runtime`, key `frontend_origins` |
-| Environment variable from secret | `DATABASE_URL` from secret `simboard-backend-db`, key `app_database_url` |
-| Environment variable from secret | `TEST_DATABASE_URL` from secret `simboard-backend-db`, key `test_database_url` |
-| Environment variable from secret | `GITHUB_CLIENT_ID` from secret `simboard-backend-oauth`, key `client_id` |
-| Environment variable from secret | `GITHUB_CLIENT_SECRET` from secret `simboard-backend-oauth`, key `client_secret` |
-| Environment variable from secret | `GITHUB_REDIRECT_URL` from secret `simboard-backend-oauth`, key `redirect_url` |
-| Environment variable from secret | `GITHUB_STATE_SECRET_KEY` from secret `simboard-backend-oauth`, key `state_secret_key` |
-| Environment variable | `COOKIE_NAME=simboard_auth`, `COOKIE_SECURE=true`, `COOKIE_HTTPONLY=true`, `COOKIE_SAMESITE=none`, `COOKIE_MAX_AGE=3600` |
+| App envFrom secret | `simboard-backend-env` |
 | Container security context | `allowPrivilegeEscalation=false`, `privileged=false`, capabilities add `DAC_OVERRIDE,NET_BIND_SERVICE`, drop `ALL` |
 
 ### Backend Service (`backend`)
@@ -101,13 +87,7 @@ Configure these workloads in Rancher to match:
 | Image | `postgres:17` |
 | Pull policy | `Always` |
 | Port | `5432/TCP` |
-| Environment variable from secret | `POSTGRES_USER` from secret `simboard-db`, key `postgres_user` |
-| Environment variable from secret | `POSTGRES_PASSWORD` from secret `simboard-db`, key `postgres_password` |
-| Environment variable | `POSTGRES_DB=simboard` |
-| Environment variable | `POSTGRES_PORT=5432` |
-| Environment variable | `POSTGRES_SERVER=db` |
-| Environment variable | `PGDATA=/var/lib/postgresql/data/pgdata` |
-| Environment variable | `PGTZ=America/Los_Angeles` |
+| EnvFrom secret | `simboard-db` (includes all required DB runtime vars) |
 | Container security context | `allowPrivilegeEscalation=false`, `privileged=false`, capabilities add `CHOWN,DAC_OVERRIDE,FOWNER,SETGID,SETUID`, drop `ALL` |
 
 ### TLS Secret (`simboard-tls-cert`)
@@ -135,28 +115,20 @@ Configure these workloads in Rancher to match:
 
 ## Required Secrets
 
-Create a backend DB secret (example: `simboard-backend-db`) with:
+Create a backend env secret (example: `simboard-backend-env`) with all backend runtime vars
+consumed by both app and migration init container, including:
 
-- `app_database_url`: backend runtime DB URL
-- `test_database_url`: backend test URL required by runtime settings
+- `ENV`, `ENVIRONMENT`, `PORT`
+- `FRONTEND_ORIGIN`, `FRONTEND_AUTH_REDIRECT_URL`, `FRONTEND_ORIGINS`
+- `DATABASE_URL`, `TEST_DATABASE_URL`
+- `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_REDIRECT_URL`, `GITHUB_STATE_SECRET_KEY`
+- `COOKIE_NAME`, `COOKIE_SECURE`, `COOKIE_HTTPONLY`, `COOKIE_SAMESITE`, `COOKIE_MAX_AGE`
 
-Create a backend runtime secret (example: `simboard-backend-runtime`) with:
+Create a DB env secret (example: `simboard-db`) with DB container runtime vars, including:
 
-- `frontend_origin`: primary frontend origin
-- `frontend_auth_redirect_url`: frontend OAuth callback route
-- `frontend_origins`: comma-separated CORS allow-list
-
-Create a backend OAuth secret (example: `simboard-backend-oauth`) with:
-
-- `client_id`: GitHub OAuth app client ID
-- `client_secret`: GitHub OAuth app client secret
-- `redirect_url`: backend OAuth callback URL
-- `state_secret_key`: OAuth state signing secret
-
-Create a DB credential secret (example: `simboard-db`) with:
-
-- `postgres_user`: Postgres user for container bootstrap
-- `postgres_password`: Postgres password for container bootstrap
+- `POSTGRES_USER`, `POSTGRES_PASSWORD`
+- `POSTGRES_DB`, `POSTGRES_PORT`, `POSTGRES_SERVER`
+- `PGDATA`, `PGTZ`
 
 Create a TLS secret (example: `simboard-tls-cert`) with:
 

@@ -267,12 +267,9 @@ Database migrations are executed by a backend Deployment initContainer during ro
 
 ### Spin Workloads
 
-Reference manifests:
+Reference runbook:
 
-- [`deploy/spin/backend-workloads.yaml`](../../deploy/spin/backend-workloads.yaml)
-- [`deploy/spin/frontend-workloads.yaml`](../../deploy/spin/frontend-workloads.yaml)
-- [`deploy/spin/db-workloads.yaml`](../../deploy/spin/db-workloads.yaml)
-- [`deploy/spin/lb-workloads.yaml`](../../deploy/spin/lb-workloads.yaml)
+- [`docs/deploy/spin.md`](../deploy/spin.md)
 
 - Backend service/deployment baseline is defined for in-cluster API routing (`backend` on `8000`).
 - Backend Deployment uses `args: ["serve"]`.
@@ -281,8 +278,8 @@ Reference manifests:
 - Frontend Deployment uses the frontend image default CMD (no explicit args).
 - DB service/deployment baseline is defined for in-cluster Postgres (`db`).
 - Ingress baseline (`lb`) terminates TLS via `simboard-tls-cert` and routes frontend/backend hosts.
-- Backend runtime/OAuth env values are sourced from secrets in the baseline manifests.
-- InitContainer `DATABASE_URL` is sourced from the same DB secret reference used by backend runtime (`app_database_url`).
+- Backend and migration initContainer env values are sourced via `envFrom` from secret `simboard-backend-env`.
+- DB container env values are sourced via `envFrom` from secret `simboard-db`.
 
 ### Deployment Order (Required)
 
@@ -328,7 +325,7 @@ Alternatively, use the built-in Rancher rollback:
 
 ## Manual Builds
 
-For testing or emergency builds:
+For testing or emergency builds, you can manually build and push images using Docker Buildx. This is not recommended for regular use, as it bypasses CI checks and versioning conventions.
 
 ```bash
 # Login
@@ -343,7 +340,16 @@ docker buildx build \
   --push \
   .
 
-# Frontend
+# Frontend dev
+cd frontend
+docker buildx build \
+  --platform=linux/amd64,linux/arm64 \
+  --build-arg VITE_API_BASE_URL=https://simboard-dev-api.e3sm.org \
+  -t registry.nersc.gov/e3sm/simboard/frontend:manual \
+  --push \
+  .
+
+# Frontend production
 cd frontend
 docker buildx build \
   --platform=linux/amd64,linux/arm64 \
