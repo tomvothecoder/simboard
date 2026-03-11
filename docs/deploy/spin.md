@@ -26,7 +26,7 @@ No workload manifests are versioned under `deploy/spin/`.
 | App container image | `registry.nersc.gov/e3sm/simboard/backend:<tag>` |
 | App pull policy | `Always` |
 | App command | leave empty (use image entrypoint) |
-| App arguments | `serve` |
+| App arguments | leave empty |
 | Port | `8000/TCP` |
 | App envFrom secret | `simboard-backend-env` |
 | Container security context | `allowPrivilegeEscalation=false`, `privileged=false`, capabilities add `DAC_OVERRIDE,NET_BIND_SERVICE`, drop `ALL` |

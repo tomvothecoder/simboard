@@ -261,7 +261,7 @@ Database migrations are executed by a backend Deployment initContainer during ro
 
 ### Runtime Behavior
 
-- Backend container runs in `serve` mode and does not run migrations at startup.
+- Backend container starts the API directly and does not run migrations at startup.
 - InitContainer runs before backend container start and executes:
   - `test -n "$DATABASE_URL" || { echo "DATABASE_URL is required"; exit 1; }; alembic upgrade head`
 
@@ -272,7 +272,7 @@ Reference runbook:
 - [`docs/deploy/spin.md`](../deploy/spin.md)
 
 - Backend service/deployment baseline is defined for in-cluster API routing (`backend` on `8000`).
-- Backend Deployment uses `args: ["serve"]`.
+- Backend Deployment uses the image entrypoint directly (no app args required).
 - Backend Deployment includes initContainer `migrate` using the same backend image tag to run Alembic before app start.
 - Frontend service/deployment baseline is defined for UI routing (`frontend` on `80`).
 - Frontend Deployment uses the frontend image default CMD (no explicit args).
