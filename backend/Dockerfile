@@ -56,6 +56,8 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
     PATH="/app/.venv/bin:$PATH" \
     UV_SYSTEM_PYTHON=1 \
+    UV_CACHE_DIR=/tmp/.cache/uv \
+    HOME=/tmp \
     ENV=${ENV}
 
 WORKDIR /app

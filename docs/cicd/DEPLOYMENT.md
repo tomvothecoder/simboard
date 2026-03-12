@@ -11,6 +11,7 @@ Complete reference for CI/CD pipelines and NERSC Spin deployments.
 - [Image Tagging Strategy](#image-tagging-strategy)
 - [Development Deployment](#development-deployment)
 - [Production Release Process](#production-release-process)
+- [Database Migrations](#database-migrations)
 - [Rollback Procedure](#rollback-procedure)
 - [Manual Builds](#manual-builds)
 - [Troubleshooting](#troubleshooting)
@@ -244,6 +245,8 @@ Update the image tags in the [Rancher UI](https://rancher2.spin.nersc.gov/dashbo
 4. Set **Pull Policy** to `IfNotPresent`
 5. Click **Save** — Rancher will roll out the new version
 
+For backend releases, migrations run automatically in a backend initContainer during rollout. See [Database Migrations](#database-migrations).
+
 ### Step 5: Verify Production
 
 1. In Rancher, check that pods are **Running** under **Workloads → Pods** in the prod namespace
@@ -254,19 +257,63 @@ Update the image tags in the [Rancher UI](https://rancher2.spin.nersc.gov/dashbo
 
 ## Database Migrations
 
-Alembic database migrations run **automatically** when the backend container starts. No manual migration step is required during deployment.
+Database migrations are executed by a backend Deployment initContainer during rollout, not on backend app startup.
 
-### Startup Sequence
+### Runtime Behavior
 
-1. **Database readiness check** — the container waits (up to 30 seconds) for the PostgreSQL server to accept connections using `pg_isready`.
-2. **`alembic upgrade head`** — applies any pending migrations. If the database is already up to date, this is a no-op.
-3. **Application start** — Uvicorn launches only after migrations succeed.
+- Backend container starts the API directly and does not run migrations at startup.
+- InitContainer runs before backend container start and executes:
+  - `test -n "$DATABASE_URL" || { echo "DATABASE_URL is required"; exit 1; }; alembic upgrade head`
 
-If either the database readiness check or migration step fails, the container exits immediately and does **not** start the application.
+### Spin Workloads
+
+Reference runbook:
+
+- [`docs/deploy/spin.md`](../deploy/spin.md)
+
+- Backend service/deployment baseline is defined for in-cluster API routing (`backend` on `8000`).
+- Backend Deployment uses the image entrypoint directly (no app args required).
+- Backend Deployment includes initContainer `migrate` using the same backend image tag to run Alembic before app start.
+- Frontend service/deployment baseline is defined for UI routing (`frontend` on `80`).
+- Frontend Deployment uses the frontend image default CMD (no explicit args).
+- DB service/deployment baseline is defined for in-cluster Postgres (`db`).
+- Ingress baseline (`lb`) terminates TLS via `simboard-tls-cert` and routes frontend/backend hosts.
+- Backend and migration initContainer env values are sourced via `envFrom` from secret `simboard-backend-env`.
+- DB container env values are sourced via `envFrom` from secret `simboard-db`.
+
+### Deployment Order (Required)
+
+1. Roll out backend deployment with the target image tag.
+2. Wait for initContainer migration step to succeed.
+3. Confirm backend pods become `Running` and `Ready`.
+
+If initContainer migration fails, backend pods will not become ready and rollout should be treated as failed.
 
 ### Concurrency Note
 
-The current deployment assumes a **single backend replica**. If horizontal scaling is introduced, migration execution should be separated into a one-time init container or deployment job to avoid race conditions.
+InitContainers run per pod. If more than one backend pod is created simultaneously, migrations may execute concurrently.
+
+Use an explicit rollout strategy that guarantees only one new pod (and therefore one migration initContainer) is created at a time:
+
+```yaml
+spec:
+   replicas: 1
+   strategy:
+      type: RollingUpdate
+      rollingUpdate:
+         maxSurge: 0
+         maxUnavailable: 1
+```
+
+Why this is required: with default `RollingUpdate` settings, Kubernetes may create a surge pod during updates, which can run a second migration initContainer even when the steady-state replica count is `1`.
+
+If you need `replicas > 1`, use a DB-level migration lock so only one initContainer can run Alembic at a time. For PostgreSQL, wrap migration execution with a single transaction-scoped advisory lock (for example, `SELECT pg_advisory_lock(<fixed_key>); ... alembic upgrade head ...; SELECT pg_advisory_unlock(<fixed_key>);`).
+
+Production-safe recommendation: apply both controls (serialized rollout strategy plus DB-level lock) for defense in depth.
+
+### Rollback Caveat
+
+Rolling back the backend container image does not roll back database schema automatically. Use backward-compatible migrations (expand/contract pattern), and use a separate, explicit rollback migration only when needed.
 
 ## Rollback Procedure
 
@@ -296,13 +343,17 @@ Alternatively, use the built-in Rancher rollback:
 
 ## Manual Builds
 
-For testing or emergency builds:
+For testing or emergency builds, you can manually build and push images using Docker Buildx. This is not recommended for regular use, as it bypasses CI checks and versioning conventions.
+
+First login to the NERSC registry:
 
 ```bash
-# Login
 docker login registry.nersc.gov
+```
 
-# Backend
+### Backend
+
+```bash
 cd backend
 docker buildx build \
   --platform=linux/amd64,linux/arm64 \
@@ -311,7 +362,23 @@ docker buildx build \
   --push \
   .
 
-# Frontend
+```
+
+### Frontend (with API URL override)
+
+```bash
+# Development
+cd frontend
+docker buildx build \
+  --platform=linux/amd64,linux/arm64 \
+  --build-arg VITE_API_BASE_URL=https://simboard-dev-api.e3sm.org \
+  -t registry.nersc.gov/e3sm/simboard/frontend:manual \
+  --push \
+  .
+```
+
+```bash
+# Production
 cd frontend
 docker buildx build \
   --platform=linux/amd64,linux/arm64 \

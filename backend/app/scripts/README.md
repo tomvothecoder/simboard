@@ -23,7 +23,7 @@ scripts/
 
 ### Domains
 
-- **db/** — Database seeding and rollback utilities
+- **db/** — Database migration, seeding, and rollback utilities
 - **users/** — Administrative and service account management
 
 ---
