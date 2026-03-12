@@ -291,7 +291,25 @@ If initContainer migration fails, backend pods will not become ready and rollout
 
 ### Concurrency Note
 
-InitContainers run per pod. If more than one backend pod is created simultaneously, migrations may execute concurrently. Keep rollout strategy and replica count aligned with migration safety expectations.
+InitContainers run per pod. If more than one backend pod is created simultaneously, migrations may execute concurrently.
+
+Use an explicit rollout strategy that guarantees only one new pod (and therefore one migration initContainer) is created at a time:
+
+```yaml
+spec:
+   replicas: 1
+   strategy:
+      type: RollingUpdate
+      rollingUpdate:
+         maxSurge: 0
+         maxUnavailable: 1
+```
+
+Why this is required: with default `RollingUpdate` settings, Kubernetes may create a surge pod during updates, which can run a second migration initContainer even when the steady-state replica count is `1`.
+
+If you need `replicas > 1`, use a DB-level migration lock so only one initContainer can run Alembic at a time. For PostgreSQL, wrap migration execution with a single transaction-scoped advisory lock (for example, `SELECT pg_advisory_lock(<fixed_key>); ... alembic upgrade head ...; SELECT pg_advisory_unlock(<fixed_key>);`).
+
+Production-safe recommendation: apply both controls (serialized rollout strategy plus DB-level lock) for defense in depth.
 
 ### Rollback Caveat
 
@@ -327,11 +345,15 @@ Alternatively, use the built-in Rancher rollback:
 
 For testing or emergency builds, you can manually build and push images using Docker Buildx. This is not recommended for regular use, as it bypasses CI checks and versioning conventions.
 
-```bash
-# Login
-docker login registry.nersc.gov
+First login to the NERSC registry:
 
-# Backend
+```bash
+docker login registry.nersc.gov
+```
+
+### Backend
+
+```bash
 cd backend
 docker buildx build \
   --platform=linux/amd64,linux/arm64 \
@@ -340,7 +362,12 @@ docker buildx build \
   --push \
   .
 
-# Frontend dev
+```
+
+### Frontend (with API URL override)
+
+```bash
+# Development
 cd frontend
 docker buildx build \
   --platform=linux/amd64,linux/arm64 \
@@ -348,8 +375,10 @@ docker buildx build \
   -t registry.nersc.gov/e3sm/simboard/frontend:manual \
   --push \
   .
+```
 
-# Frontend production
+```bash
+# Production
 cd frontend
 docker buildx build \
   --platform=linux/amd64,linux/arm64 \
