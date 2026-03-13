@@ -24,9 +24,8 @@ AI-assisted capabilities are being explored to supplement these features, includ
 - [Development Notes](#development-notes)
   - [Pre-commit Hooks](#pre-commit-hooks)
 - [Staging and Production Environments](#staging-and-production-environments)
-  - [Building and Deploying Docker Containers for NERSC Spin (Manual)](#building-and-deploying-docker-containers-for-nersc-spin-manual)
-  - [Provisioning a Service Account for HPC (NERSC Spin)](#provisioning-a-service-account-for-hpc-nersc-spin)
-  - [Helpful Docker Commands](#helpful-docker-commands)
+  - [Deployment Guide (CI/CD)](#deployment-guide-cicd)
+  - [NERSC Spin Runbook (Rancher UI)](#nersc-spin-runbook-rancher-ui)
 - [License](#license)
 
 ---
@@ -292,144 +291,23 @@ Use only when absolutely necessary.
 
 ## Staging and Production Environments
 
-### Quick Links
+### Deployment Guide (CI/CD)
 
-- **Harbor Registry:** <https://registry.nersc.gov/harbor/projects>
-- **Rancher Dashboard:** <https://rancher2.spin.nersc.gov/dashboard/c/c-fwj56/explorer/apps.deployment>
-- **Full Deployment Guide:** [docs/cicd/DEPLOYMENT.md](docs/cicd/DEPLOYMENT.md)
+Complete CI/CD pipelines, release process, rollback guidance, troubleshooting, and manual image build instructions are documented in:
 
-### Deployment & CI/CD
+- [docs/cicd/DEPLOYMENT.md](docs/cicd/DEPLOYMENT.md)
 
-SimBoard uses **automated CI/CD pipelines** to build and deploy containers to NERSC Spin.
+### NERSC Spin Runbook (Rancher UI)
 
-### Automated Builds (GitHub Actions)
+All NERSC Spin-specific workload configuration and ingestion service-account setup are documented in:
 
-- **Development Backend:** Automatically built and pushed to NERSC registry on every push to `main`
-- **Development Frontend:** Automatically built and pushed to NERSC registry on every push to `main`
-- **Production Backend & Frontend:** Automatically built and pushed on GitHub Releases or version tags (e.g., `v0.3.0`)
+- [docs/deploy/spin.md](docs/deploy/spin.md)
 
-**Registry:** `registry.nersc.gov/e3sm/simboard/`
+Use this runbook for:
 
-### Manual Builds (for testing)
-
-If you need to manually build and push images:
-
-**Login to registry:**
-
-```bash
-docker login registry.nersc.gov
-```
-
-**Backend:**
-
-```bash
-cd backend
-docker buildx build \
-  --platform=linux/amd64,linux/arm64 \
-  --build-arg ENV=production \
-  -t registry.nersc.gov/e3sm/simboard/backend:manual \
-  --push \
-  .
-```
-
-**Frontend:**
-
-```bash
-cd frontend
-docker buildx build \
-  --platform=linux/amd64,linux/arm64 \
-  --build-arg VITE_API_BASE_URL=https://simboard-api.e3sm.org \
-  -t registry.nersc.gov/e3sm/simboard/frontend:manual \
-  --push \
-  .
-```
-
-### Provisioning a Service Account for HPC (NERSC Spin)
-
-Service accounts are required when non-interactive systems (e.g., HPC ingestion jobs or automation) need to authenticate to the SimBoard API.
-
-#### Steps
-
-1. Ensure the backend is deployed and reachable (e.g., `https://simboard-dev-api.e3sm.org`).
-2. Run the provisioning script from your local machine:
-
-   ```bash
-   cd backend
-
-   uv run python -m app.scripts.users.provision_service_account \
-     --service-name perlmutter-ingestion \
-     --base-url https://simboard-dev-api.e3sm.org \
-     --admin-email admin@simboard.org \
-     --expires-in-days 365
-   ```
-
-3. Enter the admin password when prompted.
-4. Copy the generated API token and store it securely (e.g., Kubernetes Secret).
-
-#### Store as Kubernetes Secret
-
-```bash
-kubectl -n <namespace> create secret generic simboard-perlmutter-ingestion \
-  --from-literal=api_token='<TOKEN>'
-```
-
-Use this secret in your HPC job or service configuration.
-
-```bash
-> The token is shown only once. Store it securely and rotate as needed.
-```
-
-#### Example: Ingest Using Service Account Token
-
-Export the token:
-
-```bash
-export SIMBOARD_API_TOKEN=<TOKEN>
-```
-
-Submit an ingestion request:
-
-```bash
-curl -X POST https://simboard-dev-api.e3sm.org/api/v1/ingestions/from-path \
-  -H "Authorization: Bearer $SIMBOARD_API_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-        "archive_path": "/global/cfs/cdirs/e3sm/simulations/archive.tar.gz",
-        "machine_name": "perlmutter",
-        "hpc_username": "<your_hpc_username>"
-      }'
-```
-
-Python example:
-
-```python
-import requests
-
-API_BASE = "https://simboard-dev-api.e3sm.org/api/v1"
-TOKEN = "<TOKEN>"
-
-resp = requests.post(
-  f"{API_BASE}/ingestions/from-path",
-  json={
-    "archive_path": "/global/cfs/cdirs/e3sm/simulations/archive.tar.gz",
-    "machine_name": "perlmutter",
-    "hpc_username": "<your_hpc_username>"
-  },
-  headers={"Authorization": f"Bearer {TOKEN}"},
-)
-
-print(resp.json())
-```
-
-### Helpful Docker Commands
-
-```bash
-docker container ls      # List running containers
-docker image ls          # List local images
-docker tag <src> <dest>  # Tag an image
-```
-
-For complete deployment instructions, release process, and troubleshooting, see [docs/cicd/DEPLOYMENT.md](docs/cicd/DEPLOYMENT.md)
+- Rancher workload setup (`db`, `backend`, `frontend`, ingress, TLS, CronJob)
+- Ingestion service-account provisioning and `simboard-ingestion-env` secret setup
+- NERSC archive mount and ingestion PVC configuration
 
 ---
 
