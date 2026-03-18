@@ -110,7 +110,7 @@ class SimulationCreate(CamelInBaseModel):
             ...,
             description=(
                 "Unique identifier for this execution, derived from the "
-                "archive directory name (e.g. 1125772.260116-181605)"
+                "timing-file LID (e.g. 1125772.260116-181605)"
             ),
         ),
     ]
@@ -293,8 +293,7 @@ class SimulationSummaryOut(CamelOutBaseModel):
         Field(
             ...,
             description=(
-                "Unique identifier for this execution, derived from the "
-                "archive directory name"
+                "Unique identifier for this execution, derived from the timing-file LID"
             ),
         ),
     ]
@@ -390,8 +389,7 @@ class SimulationOut(CamelOutBaseModel):
         Field(
             ...,
             description=(
-                "Unique identifier for this execution, derived from the "
-                "archive directory name"
+                "Unique identifier for this execution, derived from the timing-file LID"
             ),
         ),
     ]
@@ -536,6 +534,13 @@ class SimulationOut(CamelOutBaseModel):
     last_updated_by_user: Annotated[
         UserPreview | None,
         Field(description="Full user info of who last updated the simulation."),
+    ]
+    hpc_username: Annotated[
+        str | None,
+        Field(
+            None,
+            description="HPC username for provenance (trusted, informational only)",
+        ),
     ]
 
     # Miscellaneous

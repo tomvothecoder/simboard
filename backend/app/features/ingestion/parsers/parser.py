@@ -29,7 +29,11 @@ from pathlib import Path
 from typing import Callable, Iterable, TypedDict
 
 from app.core.logger import _setup_custom_logger
-from app.features.ingestion.parsers.case_docs import parse_env_build, parse_env_case
+from app.features.ingestion.parsers.case_docs import (
+    parse_env_build,
+    parse_env_case,
+    parse_env_run,
+)
 from app.features.ingestion.parsers.case_status import parse_case_status
 from app.features.ingestion.parsers.e3sm_timing import parse_e3sm_timing
 from app.features.ingestion.parsers.git_info import (
@@ -38,11 +42,10 @@ from app.features.ingestion.parsers.git_info import (
     parse_git_status,
 )
 from app.features.ingestion.parsers.readme_case import parse_readme_case
-from app.features.simulation.enums import SimulationStatus, SimulationType
+from app.features.ingestion.parsers.types import ParsedSimulation
+from app.features.simulation.enums import SimulationStatus
 
 SimulationFiles = dict[str, str | None]
-SimulationMetadata = dict[str, str | None]
-AllSimulations = dict[str, SimulationMetadata]
 
 logger = _setup_custom_logger(__name__)
 
@@ -57,10 +60,22 @@ class FileSpec(TypedDict, total=False):
 
 
 FILE_SPECS: dict[str, FileSpec] = {
-    "e3sm_timing": {
-        "pattern": r"e3sm_timing\..*\..*",
-        "location": "root",
-        "parser": parse_e3sm_timing,
+    "case_docs_env_case": {
+        "pattern": r"env_case\.xml\..*\.gz",
+        "location": "casedocs",
+        "parser": parse_env_case,
+        "required": True,
+    },
+    "case_docs_env_build": {
+        "pattern": r"env_build\.xml\..*\.gz",
+        "location": "casedocs",
+        "parser": parse_env_build,
+        "required": True,
+    },
+    "case_docs_env_run": {
+        "pattern": r"env_run\.xml\..*",
+        "location": "casedocs",
+        "parser": parse_env_run,
         "required": True,
     },
     "readme_case": {
@@ -73,19 +88,13 @@ FILE_SPECS: dict[str, FileSpec] = {
         "pattern": r"CaseStatus\..*\.gz",
         "location": "root",
         "parser": parse_case_status,
-        "required": True,
-    },
-    "case_docs_env_case": {
-        "pattern": r"env_case\.xml\..*\.gz",
-        "location": "casedocs",
-        "parser": parse_env_case,
-        "required": True,
-    },
-    "case_docs_env_build": {
-        "pattern": r"env_build\.xml\..*\.gz",
-        "location": "casedocs",
-        "parser": parse_env_build,
         "required": False,
+    },
+    "e3sm_timing": {
+        "pattern": r"e3sm_timing\..*",
+        "location": "root",
+        "parser": parse_e3sm_timing,
+        "required": True,
     },
     "git_describe": {
         "pattern": r"GIT_DESCRIBE\..*\.gz",
@@ -110,7 +119,7 @@ FILE_SPECS: dict[str, FileSpec] = {
 
 def main_parser(
     archive_path: str | Path, output_dir: str | Path
-) -> tuple[AllSimulations, int]:
+) -> tuple[list[ParsedSimulation], int]:
     """Main entrypoint for parser workflow.
 
     Parses case directories from a performance archive, handling incomplete or
@@ -130,10 +139,10 @@ def main_parser(
 
     Returns
     -------
-    tuple[AllSimulations, int]
-        Dictionary mapping execution directory paths to their parsed simulations
-        and the count of skipped incomplete runs. Only directories that contain
-        all required metadata files are included.
+    tuple[list[ParsedSimulation], int]
+        Parsed simulations in deterministic execution-directory order and the
+        count of skipped incomplete runs. Only directories that contain all
+        required metadata files and a timing-file LID are included.
     """
     archive_path = str(archive_path)
     output_dir = str(output_dir)
@@ -160,7 +169,7 @@ def main_parser(
             "directories matching pattern: <digits>.<digits>-<digits>"
         )
 
-    results: AllSimulations = {}
+    results: list[ParsedSimulation] = []
     skipped_count = 0
 
     for case_dir, exec_dirs in case_to_executions_dirs.items():
@@ -173,13 +182,12 @@ def main_parser(
         for exec_dir in sorted_exec_dirs:
             try:
                 metadata_files = _locate_metadata_files(exec_dir)
+                results.append(_parse_all_files(exec_dir, metadata_files))
             except FileNotFoundError as exc:
                 logger.warning(f"Skipping incomplete run in '{exec_dir}': {exc}")
                 skipped_count += 1
 
                 continue
-
-            results[exec_dir] = _parse_all_files(metadata_files)
 
     if skipped_count:
         logger.info(
@@ -394,7 +402,7 @@ def _check_missing_files(files: SimulationFiles, exp_dir: str) -> None:
         )
 
 
-def _parse_all_files(files: dict[str, str | None]) -> SimulationMetadata:
+def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedSimulation:
     """Pass discovered files to their respective parser functions.
 
     Parameters
@@ -404,10 +412,11 @@ def _parse_all_files(files: dict[str, str | None]) -> SimulationMetadata:
 
     Returns
     -------
-    SimulationMetadata
-        Dictionary with parsed results from each file type.
+    ParsedSimulation
+        Typed archive-derived metadata for one execution directory.
     """
-    metadata: SimulationMetadata = {}
+    metadata: dict[str, str | None] = {}
+    case_status_metadata: dict[str, str | None] | None = None
 
     for key, spec in FILE_SPECS.items():
         path = files.get(key)
@@ -415,45 +424,70 @@ def _parse_all_files(files: dict[str, str | None]) -> SimulationMetadata:
             continue
 
         parser: Callable = spec["parser"]
-        metadata.update(parser(path))
+        parsed_metadata = parser(path)
 
-    populated_fields: SimulationMetadata = {
-        "case_name": metadata.get("case_name"),
-        "compset": metadata.get("compset"),
-        "compset_alias": metadata.get("compset_alias"),
-        "grid_name": metadata.get("grid_name"),
-        "grid_resolution": metadata.get("grid_resolution"),
-        "campaign": metadata.get("campaign"),
-        "experiment_type": metadata.get("experiment_type"),
-        "initialization_type": metadata.get("initialization_type"),
-        "case_group": metadata.get("case_group"),
-        "simulation_start_date": metadata.get("simulation_start_date"),
-        "simulation_end_date": metadata.get("simulation_end_date"),
-        "run_start_date": metadata.get("run_start_date"),
-        "run_end_date": metadata.get("run_end_date"),
-        "compiler": metadata.get("compiler"),
-        "git_repository_url": metadata.get("git_repository_url"),
-        "git_branch": metadata.get("git_branch"),
-        "git_tag": metadata.get("git_tag"),
-        "git_commit_hash": metadata.get("git_commit_hash"),
-        "machine": metadata.get("machine"),
-        "hpc_username": metadata.get("user"),
-        "status": metadata.get("status", SimulationStatus.UNKNOWN.value),
-    }
+        if key == "case_status":
+            case_status_metadata = parsed_metadata
+            continue
 
-    placeholder_fields: SimulationMetadata = {
-        # TODO: Skip this for MVP, not required. We can add it later if we find
-        # a way to determine it from the parsed files.
-        "parent_simulation_id": None,
-        # TODO: This is a required field, but we don't have a way to determine
-        # the simulation type from the parsed files yet. Default to UNKNOWN
-        # for now and manually update on the UI if needed.
-        "simulation_type": SimulationType.UNKNOWN.value,
-        "extra": None,
-        "artifacts": None,
-        "links": None,
-    }
+        metadata.update(parsed_metadata)
 
-    simulation: SimulationMetadata = {**populated_fields, **placeholder_fields}
+    # CaseStatus reflects the latest case.run attempt, so its status and run
+    # timestamps should override timing-file values when the artifact exists.
+    if case_status_metadata is not None:
+        metadata.update(case_status_metadata)
 
-    return simulation
+    execution_id = _resolve_execution_id(metadata.get("execution_id"), exec_dir)
+
+    return ParsedSimulation(
+        execution_dir=exec_dir,
+        execution_id=execution_id,
+        case_name=metadata.get("case_name"),
+        case_group=metadata.get("case_group"),
+        machine=metadata.get("machine"),
+        hpc_username=metadata.get("user"),
+        compset=metadata.get("compset"),
+        compset_alias=metadata.get("compset_alias"),
+        grid_name=metadata.get("grid_name"),
+        grid_resolution=metadata.get("grid_resolution"),
+        campaign=metadata.get("campaign"),
+        experiment_type=metadata.get("experiment_type"),
+        initialization_type=metadata.get("initialization_type"),
+        simulation_start_date=metadata.get("simulation_start_date"),
+        simulation_end_date=metadata.get("simulation_end_date"),
+        run_start_date=metadata.get("run_start_date"),
+        run_end_date=metadata.get("run_end_date"),
+        compiler=metadata.get("compiler"),
+        git_repository_url=metadata.get("git_repository_url"),
+        git_branch=metadata.get("git_branch"),
+        git_tag=metadata.get("git_tag"),
+        git_commit_hash=metadata.get("git_commit_hash"),
+        status=metadata.get("status") or SimulationStatus.UNKNOWN.value,
+    )
+
+
+def _resolve_execution_id(execution_id: str | None, exec_dir: str) -> str:
+    """Return a stable execution_id or treat the run as incomplete."""
+    if execution_id is None:
+        raise FileNotFoundError(
+            f"Required timing-file LID missing for execution directory '{exec_dir}'"
+        )
+
+    normalized = execution_id.strip()
+    if not normalized:
+        raise FileNotFoundError(
+            f"Required timing-file LID missing for execution directory '{exec_dir}'"
+        )
+
+    exec_dir_basename = os.path.basename(exec_dir)
+    if exec_dir_basename and exec_dir_basename != normalized:
+        logger.warning(
+            "Timing-file LID '%s' does not match execution directory '%s'. "
+            "Using execution directory basename as execution_id.",
+            normalized,
+            exec_dir_basename,
+        )
+
+        return exec_dir_basename
+
+    return normalized
