@@ -18,13 +18,23 @@ from app.features.ingestion.schemas import (
     IngestionResponse,
     IngestionStatus,
 )
-from app.features.machine.models import Machine
+from app.features.machine.utils import resolve_machine_by_name
 from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
 from app.features.simulation.schemas import SimulationCreate
 from app.features.user.manager import current_active_user
 from app.features.user.models import User, UserRole
 
 router = APIRouter(prefix="/ingestions", tags=["Ingestions"])
+
+
+def _resolve_request_machine(db: Session, machine_name: str):
+    machine = resolve_machine_by_name(db, machine_name)
+    if not machine:
+        raise HTTPException(
+            status_code=404, detail=f"Machine '{machine_name}' not found."
+        )
+
+    return machine
 
 
 @router.post(
@@ -78,12 +88,7 @@ def ingest_from_path(
             detail="Only administrators and service accounts may ingest from filesystem paths.",
         )
 
-    machine = db.query(Machine).filter(Machine.name == payload.machine_name).first()
-
-    if not machine:
-        raise HTTPException(
-            status_code=404, detail=f"Machine '{payload.machine_name}' not found."
-        )
+    machine = _resolve_request_machine(db, payload.machine_name)
 
     archive_path = Path(payload.archive_path)
     _validate_archive_path(archive_path)
@@ -151,12 +156,7 @@ def ingest_from_upload(
         Response model summarizing ingestion results, including counts,
         created simulations, and any recorded errors.
     """
-    machine = db.query(Machine).filter(Machine.name == machine_name).first()
-
-    if not machine:
-        raise HTTPException(
-            status_code=404, detail=f"Machine '{machine_name}' not found."
-        )
+    machine = _resolve_request_machine(db, machine_name)
 
     _validate_upload_file(file)
     filename = file.filename

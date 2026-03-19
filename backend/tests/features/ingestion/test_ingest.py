@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
+import pytest
 from dateutil import parser as real_dateutil_parser
 from sqlalchemy.orm import Session
 
@@ -15,6 +16,7 @@ from app.features.ingestion.ingest import (
     _normalize_git_url,
     _normalize_simulation_status,
     _normalize_simulation_type,
+    _stringify_config_value,
     _validate_simulation_create,
     ingest_archive,
 )
@@ -90,6 +92,13 @@ class TestIngestArchive:
     - Archive parsing integration
     - Error handling and propagation
     """
+
+    def test_stringify_config_value_falls_back_to_str_for_non_string_objects(self):
+        class ValueObject:
+            def __str__(self) -> str:
+                return "42"
+
+        assert _stringify_config_value(ValueObject()) == "42"
 
     @staticmethod
     def _create_machine(db: Session, name: str) -> Machine:
@@ -508,6 +517,52 @@ class TestIngestArchive:
         assert len(ingest_result.errors) == 1
         assert ingest_result.errors[0]["error_type"] == "LookupError"
         assert "Machine 'nonexistent'" in ingest_result.errors[0]["error"]
+
+    @pytest.mark.parametrize("machine_alias", ["pm", "pm-cpu", "pm-gpu"])
+    def test_machine_aliases_resolve_to_perlmutter(
+        self, db: Session, machine_alias: str
+    ) -> None:
+        machine = db.query(Machine).filter(Machine.name == "perlmutter").first()
+        if machine is None:
+            machine = self._create_machine(db, "perlmutter")
+
+        mock_simulations = {
+            "/path/to/1081175.251218-200935": {
+                "execution_id": "1081175.251218-200935",
+                "case_name": "case1",
+                "compset": "test",
+                "compset_alias": "test_alias",
+                "grid_name": "grid",
+                "grid_resolution": "0.9x1.25",
+                "machine": machine_alias,
+                "simulation_start_date": "2020-01-01",
+                "initialization_type": "test",
+                "simulation_type": "test_type",
+                "status": None,
+                "experiment_type": None,
+                "campaign": None,
+                "run_start_date": None,
+                "run_end_date": None,
+                "compiler": None,
+                "git_repository_url": None,
+                "git_branch": None,
+                "git_tag": None,
+                "git_commit_hash": None,
+                "created_by": None,
+                "last_updated_by": None,
+            }
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+        ):
+            ingest_result = ingest_archive(
+                Path("/tmp/archive.zip"), Path("/tmp/out"), db
+            )
+
+        assert len(ingest_result.simulations) == 1
+        assert ingest_result.simulations[0].machine_id == machine.id
 
 
 class TestIngestArchiveContinued(TestIngestArchive):
