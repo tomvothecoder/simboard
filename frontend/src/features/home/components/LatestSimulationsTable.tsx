@@ -1,26 +1,31 @@
-import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import { ColumnDef } from '@tanstack/react-table';
+import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { ArrowRight, Check, GitBranch } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { TableCellText } from '@/components/ui/table-cell-text';
 import type { SimulationOut } from '@/types/index';
 
 const simulationTypeIcon = (sim: SimulationOut) => {
   if (sim.simulationType === 'production') {
     return (
-      <span
-        title="Production"
-        style={{ display: 'inline-flex', alignItems: 'center', marginRight: 4 }}
-      >
-        <Check className="w-4 h-4" style={{ marginRight: 4 }} />
+      <span title="Production" className="inline-flex items-center gap-1.5 text-foreground">
+        <Check className="h-4 w-4" />
         Production
       </span>
     );
   }
   return (
-    <span title="Master" style={{ display: 'inline-flex', alignItems: 'center', marginRight: 4 }}>
-      <GitBranch className="w-4 h-4" style={{ marginRight: 4 }} />
+    <span title="Master" className="inline-flex items-center gap-1.5 text-foreground">
+      <GitBranch className="h-4 w-4" />
       Master
     </span>
   );
@@ -37,47 +42,21 @@ const LatestSimulationsTable = ({ latestSimulations }: LatestSimulationsTablePro
     {
       accessorKey: 'executionId',
       header: 'Execution ID',
-      cell: (info) => info.getValue() || 'N/A',
+      cell: (info) => <TableCellText value={String(info.getValue() ?? 'N/A')} mono />,
     },
     {
       accessorKey: 'caseName',
       header: 'Case Name',
-      cell: (info) => info.getValue() || 'N/A',
+      cell: (info) => <TableCellText value={String(info.getValue() ?? 'N/A')} />,
     },
     {
       accessorKey: 'campaign',
       header: 'Campaign',
-      cell: (info) => info.getValue() || 'N/A',
-    },
-    {
-      accessorKey: 'simulationStartDate',
-      header: 'Sim Start Date',
-      cell: (info) => {
-        const value = info.getValue();
-        return value ? new Date(value as string).toLocaleDateString() : 'N/A';
-      },
-    },
-    {
-      accessorKey: 'simulationEndDate',
-      header: 'Sim End Date',
-      cell: (info) => {
-        const value = info.getValue();
-        return value ? new Date(value as string).toLocaleDateString() : 'N/A';
-      },
-    },
-    {
-      id: 'versionOrHash',
-      header: 'Version / Git Hash',
-      cell: (info) => {
-        const sim = info.row.original;
-        return sim.simulationType === 'production'
-          ? sim.gitTag || 'N/A'
-          : sim.gitCommitHash || 'N/A';
-      },
+      cell: (info) => <TableCellText value={String(info.getValue() ?? 'N/A')} />,
     },
     {
       accessorKey: 'createdAt',
-      header: 'Upload Date',
+      header: 'Submitted',
       cell: (info) => {
         const value = info.getValue();
         return value ? new Date(value as string).toLocaleDateString() : 'N/A';
@@ -97,9 +76,9 @@ const LatestSimulationsTable = ({ latestSimulations }: LatestSimulationsTablePro
           size="sm"
           onClick={() => navigate(`/simulations/${info.row.original.id}`)}
           aria-label="Details"
-          className="p-2"
+          className="h-8 w-8 p-0 text-muted-foreground"
         >
-          <ArrowRight className="w-4 h-4" />
+          <ArrowRight className="h-4 w-4" />
         </Button>
       ),
       enableSorting: false,
@@ -115,46 +94,35 @@ const LatestSimulationsTable = ({ latestSimulations }: LatestSimulationsTablePro
   });
 
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-      <thead>
+    <Table className="table-fixed">
+      <TableHeader>
         {table.getHeaderGroups().map((headerGroup) => (
-          <tr key={headerGroup.id}>
+          <TableRow key={headerGroup.id}>
             {headerGroup.headers.map((header) => (
-              <th
+              <TableHead
                 key={header.id}
-                style={{
-                  borderBottom: '1px solid #ddd',
-                  padding: '8px',
-                  textAlign: 'left',
-                  background: '#f9f9f9',
-                }}
+                className="bg-muted/30 text-xs font-medium uppercase tracking-wide text-muted-foreground"
               >
                 {header.isPlaceholder
                   ? null
                   : flexRender(header.column.columnDef.header, header.getContext())}
-              </th>
+              </TableHead>
             ))}
-          </tr>
+          </TableRow>
         ))}
-      </thead>
-      <tbody>
+      </TableHeader>
+      <TableBody>
         {table.getRowModel().rows.map((row) => (
-          <tr key={row.id}>
+          <TableRow key={row.id}>
             {row.getVisibleCells().map((cell) => (
-              <td
-                key={cell.id}
-                style={{
-                  borderBottom: '1px solid #eee',
-                  padding: '8px',
-                }}
-              >
+              <TableCell key={cell.id} className="align-top">
                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
-              </td>
+              </TableCell>
             ))}
-          </tr>
+          </TableRow>
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 };
 

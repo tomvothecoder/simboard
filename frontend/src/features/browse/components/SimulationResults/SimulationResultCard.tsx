@@ -1,6 +1,5 @@
 import {
   BadgeCheck,
-  ChevronDown,
   Clock,
   FlaskConical,
   GitBranch,
@@ -9,6 +8,7 @@ import {
   Server,
   Tag,
 } from 'lucide-react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { SimulationStatusBadge } from '@/components/shared/SimulationStatusBadge';
@@ -16,21 +16,32 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import type { SimulationOut } from '@/types/index';
 
 interface SimulationResultCard {
   simulation: SimulationOut;
   selected: boolean;
+  isSelectionDisabled: boolean;
   handleSelect: (sim: SimulationOut) => void;
 }
 
 export const SimulationResultCard = ({
   simulation,
   selected,
+  isSelectionDisabled,
   handleSelect,
 }: SimulationResultCard) => {
   // -------------------- Router --------------------
   const navigate = useNavigate();
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
   // -------------------- Derived Data --------------------
   const startStr = simulation.simulationStartDate
@@ -39,27 +50,58 @@ export const SimulationResultCard = ({
   const endStr = simulation.simulationEndDate
     ? new Date(simulation.simulationEndDate).toISOString().slice(0, 10)
     : 'N/A';
+  const runStartStr = simulation.runStartDate
+    ? new Date(simulation.runStartDate).toISOString().slice(0, 10)
+    : 'N/A';
+  const runEndStr = simulation.runEndDate
+    ? new Date(simulation.runEndDate).toISOString().slice(0, 10)
+    : 'N/A';
+  const createdAtStr = new Date(simulation.createdAt).toISOString().slice(0, 10);
+  const updatedAtStr = new Date(simulation.updatedAt).toISOString().slice(0, 10);
+  const diagnosticLinks = simulation.groupedLinks.diagnostic ?? [];
+  const performanceLinks = simulation.groupedLinks.performance ?? [];
+  const runScripts = simulation.groupedArtifacts.runScript ?? [];
+  const archivePaths = simulation.groupedArtifacts.archive ?? [];
+  const postprocessingScripts =
+    simulation.groupedArtifacts.postProcessingScript ??
+    simulation.groupedArtifacts.postprocessingScript ??
+    [];
 
   return (
-    <Card className="w-full h-full p-0 flex flex-col shadow-md rounded-lg border">
-      <div className="flex flex-col sm:flex-row items-start gap-4 p-4">
+    <Card
+      className={`flex h-full w-full flex-col rounded-2xl border bg-white p-0 shadow-sm transition-shadow ${
+        selected
+          ? 'border-slate-300 ring-1 ring-slate-200'
+          : 'border-slate-200 hover:shadow-md'
+      } ${isSelectionDisabled ? 'cursor-default' : 'cursor-pointer'}`}
+      onClick={() => {
+        if (!isSelectionDisabled || selected) {
+          handleSelect(simulation);
+        }
+      }}
+    >
+      <div className="flex flex-col items-start gap-4 p-5 sm:flex-row">
         <Checkbox
           checked={selected}
           onCheckedChange={() => handleSelect(simulation)}
           aria-label="Select for comparison"
           className="mt-1"
+          disabled={isSelectionDisabled && !selected}
+          onClick={(event) => event.stopPropagation()}
           style={{ width: 24, height: 24 }}
         />
-        <div className="flex-1 w-full min-w-0 max-w-2xl">
-          <CardHeader className="p-0 mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-            <div>
-              <span className="font-semibold text-lg break-words">{simulation.executionId}</span>
-              <div className="text-sm text-muted-foreground">
-                <span className="font-medium">Case:</span> {simulation.caseName}
+        <div className="w-full max-w-2xl min-w-0 flex-1">
+          <CardHeader className="mb-4 flex flex-col items-start gap-2.5 p-0">
+            <div className="min-w-0">
+              <span className="block break-words text-base font-semibold tracking-tight text-slate-950">
+                {simulation.executionId}
+              </span>
+              <div className="mt-1 break-words text-sm leading-6 text-slate-500">
+                <span className="font-medium text-slate-600">Case:</span> {simulation.caseName}
               </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-sm font-medium text-gray-700">Status:</span>
+            <div className="flex w-full flex-wrap items-center gap-2 text-xs uppercase tracking-[0.12em] text-slate-400">
+              <span>Status</span>
               <SimulationStatusBadge status={simulation.status} />
             </div>
           </CardHeader>
@@ -73,54 +115,56 @@ export const SimulationResultCard = ({
             }}
           >
             {/* One metadata item per line with bold labels */}
-            <dl className="space-y-1 text-sm mb-2">
+            <dl className="mb-2 space-y-2 text-sm">
               <div className="flex items-start gap-2">
-                <dt className="flex items-center gap-2 whitespace-nowrap font-semibold text-gray-800">
+                <dt className="flex items-center gap-2 whitespace-nowrap font-semibold text-slate-700">
                   <Rocket className="w-4 h-4" /> Campaign:
                 </dt>
-                <dd className="break-words font-normal text-gray-600">{simulation.campaign}</dd>
+                <dd className="break-words font-normal text-slate-600">{simulation.campaign}</dd>
               </div>
 
               <div className="flex items-start gap-2">
-                <dt className="flex items-center gap-2 whitespace-nowrap font-semibold text-gray-800">
+                <dt className="flex items-center gap-2 whitespace-nowrap font-semibold text-slate-700">
                   <Lightbulb className="w-4 h-4" /> Experiment:
                 </dt>
-                <dd className="break-words font-normal text-gray-600">
+                <dd className="break-words font-normal text-slate-600">
                   {simulation.experimentType}
                 </dd>
               </div>
 
               <div className="flex items-start gap-2">
-                <dt className="flex items-center gap-2 whitespace-nowrap font-semibold text-gray-800">
+                <dt className="flex items-center gap-2 whitespace-nowrap font-semibold text-slate-700">
                   <Clock className="w-4 h-4" /> Model Run Dates:
                 </dt>
-                <dd className="break-words font-normal text-gray-600">
+                <dd className="break-words font-normal text-slate-600">
                   {startStr} {'\u2192'} {endStr}
                 </dd>
               </div>
             </dl>
 
-            <div className="w-full my-2 border-t border-gray-200" />
+            <div className="my-2 w-full border-t border-slate-200" />
 
-            {/* Grid & Machine grouping with divider and lighter value color */}
-            <div className="flex flex-wrap gap-4 items-center mb-4 mt-2 text-xs text-gray-700">
-              <div className="flex items-center gap-1">
-                <FlaskConical className="w-3 h-3 text-gray-800" />
+            <div className="mb-4 mt-2 space-y-2 text-xs text-slate-700">
+              <div className="flex items-start gap-2">
+                <FlaskConical className="mt-0.5 h-3 w-3 shrink-0 text-slate-700" />
                 <span className="font-semibold">Grid:</span>
-                <span className="font-normal ml-1 text-gray-500">{simulation.gridName}</span>
+                <span className="min-w-0 break-words font-normal text-slate-500">
+                  {simulation.gridName}
+                </span>
               </div>
-              <span className="h-4 w-px bg-gray-300 mx-2" />
-              <div className="flex items-center gap-1">
-                <Server className="w-3 h-3 text-gray-800" />
+              <div className="flex items-start gap-2">
+                <Server className="mt-0.5 h-3 w-3 shrink-0 text-slate-700" />
                 <span className="font-semibold">Machine:</span>
-                <span className="font-normal ml-1 text-gray-500">{simulation.machine.name}</span>
+                <span className="min-w-0 break-words font-normal text-slate-500">
+                  {simulation.machine.name}
+                </span>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2 items-center mb-4 mt-2">
+            <div className="mb-4 mt-2 flex flex-wrap items-center gap-2">
               <Badge
                 variant="secondary"
-                className="flex items-center gap-1 text-sm px-2 py-1 border border-gray-300"
+                className="flex items-center gap-1 border border-slate-200 bg-slate-50 px-2 py-1 text-sm text-slate-700"
               >
                 <Tag className="w-4 h-4" />
                 Tag:
@@ -128,7 +172,7 @@ export const SimulationResultCard = ({
               </Badge>
               <Badge
                 variant="secondary"
-                className="flex items-center gap-1 text-sm px-2 py-1 border border-gray-300"
+                className="flex items-center gap-1 border border-slate-200 bg-slate-50 px-2 py-1 text-sm text-slate-700"
               >
                 Canonical: {simulation.isCanonical ? 'Yes' : 'No'}
                 {!simulation.isCanonical && simulation.changeCount > 0 && (
@@ -177,157 +221,349 @@ export const SimulationResultCard = ({
 
             <div style={{ height: '6px' }} />
 
-            <div className="mb-4 border rounded-lg bg-muted/40">
-              <details className="w-full group">
-                <summary className="flex justify-between items-center cursor-pointer px-2 py-2 rounded hover:bg-muted transition group-open:border-b group-open:border-muted-foreground">
+            <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="mb-4 w-full justify-between rounded-xl border-slate-200 bg-slate-50/70 px-4 py-6 text-left text-base text-slate-900 hover:bg-slate-100"
+                  onClick={(event) => event.stopPropagation()}
+                >
                   More Details
-                  <ChevronDown className="w-4 h-4 ml-2" />
-                </summary>
-                <div className="px-2 py-2 space-y-2 text-sm text-gray-700">
-                  {/* FIXME: Fix this field.  */}
-                  {/* Key Features */}
-                  {simulation.keyFeatures && (
-                    <div>
-                      <span className="font-semibold">Key Features:</span>
-                      <span className="ml-1 text-gray-600">{simulation.keyFeatures}</span>
-                    </div>
-                  )}
+                </Button>
+              </DialogTrigger>
+              <DialogContent
+                className="left-auto right-0 top-0 h-[100dvh] w-full max-w-[min(92vw,42rem)] translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-l border-slate-200 p-0 data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-2xl sm:rounded-none"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="flex h-full min-h-0 flex-col">
+                  <DialogHeader className="border-b border-slate-200 px-6 py-5 text-left">
+                    <DialogTitle className="text-xl text-slate-950">
+                      {simulation.executionId}
+                    </DialogTitle>
+                    <DialogDescription className="mt-2 text-sm leading-6 text-slate-600">
+                      Additional browse details for <span className="font-medium">{simulation.caseName}</span>.
+                    </DialogDescription>
+                  </DialogHeader>
 
-                  {/* Notes */}
-                  {simulation.notesMarkdown && (
-                    <div>
-                      <span className="font-semibold">Notes:</span>
-                      <span className="ml-1 text-gray-600">{simulation.notesMarkdown}</span>
-                    </div>
-                  )}
-
-                  {/* Known Issues */}
-                  {simulation.knownIssues && (
-                    <div>
-                      <span className="font-semibold">Known Issues:</span>
-                      <span className="ml-1 text-gray-600">{simulation.knownIssues}</span>
-                    </div>
-                  )}
-
-                  {/* Diagnostic Links */}
-                  {simulation.groupedLinks.diagnostic &&
-                    simulation.groupedLinks.diagnostic.length > 0 && (
-                      <div>
-                        <span className="font-semibold">Diagnostics:</span>
-                        <ul className="list-disc ml-6">
-                          {simulation.groupedLinks.diagnostic.map((d, i) => (
-                            <li key={i}>
-                              <a
-                                href={d.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-700 underline"
-                              >
-                                {d.label}
-                              </a>
-                            </li>
-                          ))}
-                        </ul>
+                  <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5">
+                    <section className="space-y-3">
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                        Overview
+                      </h3>
+                      <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-4 md:grid-cols-2">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                            Case
+                          </p>
+                          <p className="mt-1 text-sm text-slate-700">{simulation.caseName}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                            Status
+                          </p>
+                          <div className="mt-1">
+                            <SimulationStatusBadge status={simulation.status} />
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                            Machine
+                          </p>
+                          <p className="mt-1 text-sm text-slate-700">{simulation.machine.name}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                            Compiler
+                          </p>
+                          <p className="mt-1 text-sm text-slate-700">{simulation.compiler ?? 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                            Grid
+                          </p>
+                          <p className="mt-1 text-sm text-slate-700">{simulation.gridName}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                            Canonical
+                          </p>
+                          <p className="mt-1 text-sm text-slate-700">
+                            {simulation.isCanonical ? 'Yes' : 'No'}
+                            {!simulation.isCanonical && simulation.changeCount > 0
+                              ? ` (${simulation.changeCount} changes)`
+                              : ''}
+                          </p>
+                        </div>
                       </div>
+                    </section>
+
+                    <section className="space-y-3">
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                        Runtime And Provenance
+                      </h3>
+                      <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                            Model Run Dates
+                          </p>
+                          <p className="mt-1 text-sm text-slate-700">
+                            {startStr} to {endStr}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                            Runtime Window
+                          </p>
+                          <p className="mt-1 text-sm text-slate-700">
+                            {runStartStr} to {runEndStr}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                            Created By
+                          </p>
+                          <p className="mt-1 text-sm text-slate-700">
+                            {simulation.createdByUser?.email ?? simulation.createdBy ?? 'N/A'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                            HPC Username
+                          </p>
+                          <p className="mt-1 text-sm text-slate-700">{simulation.hpcUsername ?? 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                            Catalog Dates
+                          </p>
+                          <p className="mt-1 text-sm text-slate-700">
+                            Created {createdAtStr}, updated {updatedAtStr}
+                          </p>
+                        </div>
+                      </div>
+                    </section>
+
+                    {(simulation.gitRepositoryUrl ||
+                      simulation.gitBranch ||
+                      simulation.gitTag ||
+                      simulation.gitCommitHash) && (
+                      <section className="space-y-3">
+                        <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                          Version Control
+                        </h3>
+                        <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
+                          {simulation.gitRepositoryUrl && (
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                Repository
+                              </p>
+                              <p className="mt-1 break-all text-sm text-slate-700">
+                                {simulation.gitRepositoryUrl}
+                              </p>
+                            </div>
+                          )}
+                          {simulation.gitBranch && (
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                Branch
+                              </p>
+                              <p className="mt-1 break-all font-mono text-xs text-slate-700">
+                                {simulation.gitBranch}
+                              </p>
+                            </div>
+                          )}
+                          {simulation.gitTag && (
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                Tag
+                              </p>
+                              <p className="mt-1 text-sm text-slate-700">{simulation.gitTag}</p>
+                            </div>
+                          )}
+                          {simulation.gitCommitHash && (
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                Commit
+                              </p>
+                              <p className="mt-1 break-all font-mono text-xs text-slate-700">
+                                {simulation.gitCommitHash}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </section>
                     )}
 
-                  {/* PACE Links */}
-                  {simulation.groupedLinks.performance &&
-                    simulation.groupedLinks.performance.length > 0 && (
-                      <div>
-                        <span className="font-semibold">PACE Links:</span>
-                        <ul className="list-disc ml-6">
-                          {simulation.groupedLinks.performance.map((p, i) => (
-                            <li key={i}>
-                              <a
-                                href={p.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-700 underline"
-                              >
-                                {p.label}
-                              </a>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
+                    {(simulation.description ||
+                      simulation.keyFeatures ||
+                      simulation.knownIssues ||
+                      simulation.notesMarkdown) && (
+                      <section className="space-y-3">
+                        <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                          Notes And Context
+                        </h3>
+                        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4">
+                          {simulation.description && (
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                Description
+                              </p>
+                              <p className="mt-1 text-sm leading-6 text-slate-700">
+                                {simulation.description}
+                              </p>
+                            </div>
+                          )}
+                          {simulation.keyFeatures && (
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                Key Features
+                              </p>
+                              <p className="mt-1 text-sm leading-6 text-slate-700">
+                                {simulation.keyFeatures}
+                              </p>
+                            </div>
+                          )}
+                          {simulation.knownIssues && (
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                Known Issues
+                              </p>
+                              <p className="mt-1 text-sm leading-6 text-slate-700">
+                                {simulation.knownIssues}
+                              </p>
+                            </div>
+                          )}
+                          {simulation.notesMarkdown && (
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                Notes
+                              </p>
+                              <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                                {simulation.notesMarkdown}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </section>
                     )}
 
-                  {/* Git Info */}
-                  {(simulation.gitBranch || simulation.gitCommitHash) && (
-                    <div>
-                      <span className="font-semibold">Git:</span>
-                      <span className="ml-1 text-gray-600">
-                        {simulation.gitBranch && (
-                          <>
-                            Branch: <span className="font-mono">{simulation.gitBranch}</span>
-                          </>
-                        )}
-                        {simulation.gitCommitHash && (
-                          <>
-                            {simulation.gitBranch ? ' | ' : ''}
-                            Hash:{' '}
-                            <span className="font-mono">
-                              {simulation.gitCommitHash.slice(0, 8)}
-                            </span>
-                          </>
-                        )}
-                      </span>
-                    </div>
-                  )}
-                  {/* FIXME: Fix this field */}
-                  {/* Run Script Paths */}
-                  {simulation.groupedArtifacts.runScript &&
-                    simulation.groupedArtifacts.runScript.length > 0 && (
-                      <div>
-                        <span className="font-semibold">Run Scripts:</span>
-                        <ul className="list-disc ml-6 text-gray-600">
-                          {simulation.groupedArtifacts.runScript.map((p, i) => (
-                            <li key={i} className="break-all">
-                              {typeof p === 'string' ? p : JSON.stringify(p)}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
+                    {(diagnosticLinks.length > 0 || performanceLinks.length > 0) && (
+                      <section className="space-y-3">
+                        <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                          External Links
+                        </h3>
+                        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4">
+                          {diagnosticLinks.length > 0 && (
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                Diagnostics
+                              </p>
+                              <ul className="mt-2 space-y-2">
+                                {diagnosticLinks.map((link) => (
+                                  <li key={link.id}>
+                                    <a
+                                      href={link.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-sm text-blue-700 underline"
+                                    >
+                                      {link.label}
+                                    </a>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {performanceLinks.length > 0 && (
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                Performance
+                              </p>
+                              <ul className="mt-2 space-y-2">
+                                {performanceLinks.map((link) => (
+                                  <li key={link.id}>
+                                    <a
+                                      href={link.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-sm text-blue-700 underline"
+                                    >
+                                      {link.label}
+                                    </a>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      </section>
                     )}
-                  {/* Archive Paths */}
-                  {simulation.groupedArtifacts.archive &&
-                    simulation.groupedArtifacts.archive.length > 0 && (
-                      <div>
-                        <span className="font-semibold">Archive Paths:</span>
-                        <ul className="list-disc ml-6 text-gray-600">
-                          {simulation.groupedArtifacts.archive.map((p, i) => (
-                            <li key={i} className="break-all">
-                              {typeof p === 'string' ? p : JSON.stringify(p)}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
+
+                    {(runScripts.length > 0 || archivePaths.length > 0 || postprocessingScripts.length > 0) && (
+                      <section className="space-y-3">
+                        <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                          Artifact Paths
+                        </h3>
+                        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4">
+                          {runScripts.length > 0 && (
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                Run Scripts
+                              </p>
+                              <ul className="mt-2 space-y-2 text-sm text-slate-700">
+                                {runScripts.map((item, index) => (
+                                  <li key={index} className="break-all">
+                                    {typeof item === 'string' ? item : (item.label ?? item.uri)}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {archivePaths.length > 0 && (
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                Archive Paths
+                              </p>
+                              <ul className="mt-2 space-y-2 text-sm text-slate-700">
+                                {archivePaths.map((item, index) => (
+                                  <li key={index} className="break-all">
+                                    {typeof item === 'string' ? item : (item.label ?? item.uri)}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {postprocessingScripts.length > 0 && (
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                Postprocessing Scripts
+                              </p>
+                              <ul className="mt-2 space-y-2 text-sm text-slate-700">
+                                {postprocessingScripts.map((item, index) => (
+                                  <li key={index} className="break-all">
+                                    {typeof item === 'string' ? item : (item.label ?? item.uri)}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      </section>
                     )}
-                  {/* Postprocessing Scripts */}
-                  {simulation.groupedArtifacts.postProcessingScript &&
-                    simulation.groupedArtifacts.postProcessingScript.length > 0 && (
-                      <div>
-                        <span className="font-semibold">Postprocessing Scripts:</span>
-                        <ul className="list-disc ml-6 text-gray-600">
-                          {simulation.groupedArtifacts.postprocessingScript.map((p, i) => (
-                            <li key={i} className="break-all">
-                              {typeof p === 'string' ? p : JSON.stringify(p)}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                  </div>
                 </div>
-              </details>
-            </div>
+              </DialogContent>
+            </Dialog>
 
             <div className="flex flex-col sm:flex-row items-center gap-4 mt-4 justify-end">
               <Button
                 variant="outline"
                 size="sm"
                 className="w-full sm:w-40"
-                onClick={() => navigate(`/simulations/${simulation.id}`)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  navigate(`/simulations/${simulation.id}`);
+                }}
               >
                 View All Details
               </Button>

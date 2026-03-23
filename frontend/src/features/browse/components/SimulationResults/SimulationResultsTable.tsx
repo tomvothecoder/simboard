@@ -13,17 +13,11 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import { ArrowUpDown, ChevronDown } from 'lucide-react';
+import { ArrowUpDown } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import {
   Table,
   TableBody,
@@ -32,11 +26,40 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { TableCellText } from '@/components/ui/table-cell-text';
 import { BrowseToolbar } from '@/features/browse/components/BrowseToolbar';
 import type { SimulationOut } from '@/types/index';
 
 // Max number of rows that can be selected at once.
 const MAX_SELECTION = 5;
+
+const renderSortableHeader = (label: string) =>
+  function SortableHeader({
+    column,
+  }: {
+    column: {
+      toggleSorting: () => void;
+      getIsSorted: () => false | 'asc' | 'desc';
+    };
+  }) {
+    const isSorted = column.getIsSorted();
+
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => column.toggleSorting()}
+        className={`h-8 px-2 text-sm font-semibold ${
+          isSorted
+            ? 'bg-slate-100 text-slate-950 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.3)]'
+            : 'text-slate-500'
+        } hover:bg-slate-100 hover:text-slate-950`}
+      >
+        {label}
+        <ArrowUpDown className={`h-4 w-4 ${isSorted ? 'opacity-100' : 'opacity-50'}`} />
+      </Button>
+    );
+  };
 
 interface SimulationResultsTable {
   simulations: SimulationOut[];
@@ -46,6 +69,10 @@ interface SimulationResultsTable {
   selectedSimulationIds: string[];
   setSelectedSimulationIds: (ids: string[]) => void;
   handleCompareButtonClick: () => void;
+  columnVisibility: VisibilityState;
+  setColumnVisibility: (
+    updater: VisibilityState | ((old: VisibilityState) => VisibilityState),
+  ) => void;
 }
 
 const columns: ColumnDef<SimulationOut>[] = [
@@ -65,35 +92,29 @@ const columns: ColumnDef<SimulationOut>[] = [
   },
   {
     accessorKey: 'caseName',
-    header: ({ column }) => (
-      <Button variant="ghost" onClick={() => column.toggleSorting()}>
-        Case Name
-        <ArrowUpDown />
-      </Button>
+    header: renderSortableHeader('Case Name'),
+    cell: ({ row }) => (
+      <TableCellText value={row.original.caseName} className="font-medium text-slate-950" />
     ),
-    cell: ({ row }) => <div>{row.getValue('caseName')}</div>,
     enableSorting: true,
-    meta: { sticky: true, width: 200, position: 'left' },
+    meta: { sticky: true, width: 320, position: 'left' },
   },
   {
     accessorKey: 'executionId',
-    header: ({ column }) => (
-      <Button variant="ghost" onClick={() => column.toggleSorting()}>
-        Execution ID
-        <ArrowUpDown />
-      </Button>
+    header: renderSortableHeader('Execution ID'),
+    cell: ({ row }) => (
+      <TableCellText
+        value={row.original.executionId}
+        mono
+        className="font-medium text-slate-800"
+      />
     ),
-    cell: ({ row }) => <div>{row.getValue('executionId')}</div>,
     enableSorting: true,
+    meta: { width: 220 },
   },
   {
     accessorKey: 'isCanonical',
-    header: ({ column }) => (
-      <Button variant="ghost" onClick={() => column.toggleSorting()}>
-        Canonical
-        <ArrowUpDown />
-      </Button>
-    ),
+    header: renderSortableHeader('Canonical'),
     cell: ({ row }) => {
       const isCanonical = row.original.isCanonical;
       const changeCount = row.original.changeCount;
@@ -101,54 +122,40 @@ const columns: ColumnDef<SimulationOut>[] = [
         <div>
           {isCanonical ? 'Yes' : 'No'}
           {!isCanonical && changeCount > 0 && (
-            <span className="text-muted-foreground ml-1">({changeCount})</span>
+            <span className="ml-1 text-slate-400">({changeCount})</span>
           )}
         </div>
       );
     },
     enableSorting: true,
+    meta: { width: 110 },
   },
   {
     accessorKey: 'campaign',
-    header: ({ column }) => (
-      <Button variant="ghost" onClick={() => column.toggleSorting()}>
-        Campaign
-        <ArrowUpDown />
-      </Button>
-    ),
-    cell: ({ row }) => <div>{row.getValue('campaign')}</div>,
+    header: renderSortableHeader('Campaign'),
+    cell: ({ row }) => <TableCellText value={row.original.campaign} className="text-slate-600" />,
     enableSorting: true,
+    meta: { width: 280 },
   },
   {
     accessorKey: 'experimentType',
-    header: ({ column }) => (
-      <Button variant="ghost" onClick={() => column.toggleSorting()}>
-        Experiment
-        <ArrowUpDown />
-      </Button>
+    header: renderSortableHeader('Experiment'),
+    cell: ({ row }) => (
+      <TableCellText value={row.original.experimentType} className="text-slate-600" />
     ),
-    cell: ({ row }) => <div>{row.getValue('experimentType')}</div>,
     enableSorting: true,
+    meta: { width: 180 },
   },
   {
     accessorKey: 'gitTag',
-    header: ({ column }) => (
-      <Button variant="ghost" onClick={() => column.toggleSorting()}>
-        Version Tag
-        <ArrowUpDown />
-      </Button>
-    ),
-    cell: ({ row }) => <div>{row.getValue('gitTag')}</div>,
+    header: renderSortableHeader('Version Tag'),
+    cell: ({ row }) => <TableCellText value={row.original.gitTag} className="text-slate-600" />,
     enableSorting: true,
+    meta: { width: 180 },
   },
   {
     accessorKey: 'simulationStartDate',
-    header: ({ column }) => (
-      <Button variant="ghost" onClick={() => column.toggleSorting()}>
-        Model Start Date
-        <ArrowUpDown />
-      </Button>
-    ),
+    header: renderSortableHeader('Model Start Date'),
     cell: ({ row }) => {
       const start = row.original.simulationStartDate;
       return start ? (
@@ -158,66 +165,47 @@ const columns: ColumnDef<SimulationOut>[] = [
       );
     },
     enableSorting: true,
+    meta: { width: 150 },
   },
   {
     accessorKey: 'simulationEndDate',
-    header: ({ column }) => (
-      <Button variant="ghost" onClick={() => column.toggleSorting()}>
-        Model End Date
-        <ArrowUpDown />
-      </Button>
-    ),
+    header: renderSortableHeader('Model End Date'),
     cell: ({ row }) => {
       const end = row.original.simulationEndDate;
       return end ? <span>{end}</span> : <span className="text-muted-foreground italic">N/A</span>;
     },
     enableSorting: true,
+    meta: { width: 150 },
   },
   {
     accessorKey: 'ensembleMember',
-    header: ({ column }) => (
-      <Button variant="ghost" onClick={() => column.toggleSorting()}>
-        Ensemble Member
-        <ArrowUpDown />
-      </Button>
-    ),
-    cell: ({ row }) => <div>{row.getValue('ensembleMember')}</div>,
+    header: renderSortableHeader('Ensemble Member'),
+    cell: ({ getValue }) => <TableCellText value={String(getValue() ?? '—')} />,
     enableSorting: true,
+    meta: { width: 160 },
   },
   {
     accessorKey: 'gridResolution',
-    header: ({ column }) => (
-      <Button variant="ghost" onClick={() => column.toggleSorting()}>
-        Grid Resolution
-        <ArrowUpDown />
-      </Button>
-    ),
-    cell: ({ row }) => <div>{row.getValue('gridResolution')}</div>,
+    header: renderSortableHeader('Grid Resolution'),
+    cell: ({ row }) => <TableCellText value={row.original.gridResolution} />,
     enableSorting: true,
+    meta: { width: 180 },
   },
   {
     accessorKey: 'compset',
-    header: ({ column }) => (
-      <Button variant="ghost" onClick={() => column.toggleSorting()}>
-        Component Set
-        <ArrowUpDown />
-      </Button>
-    ),
-    cell: ({ row }) => <div>{row.getValue('compset')}</div>,
+    header: renderSortableHeader('Component Set'),
+    cell: ({ row }) => <TableCellText value={row.original.compset} />,
     enableSorting: true,
     enableHiding: true,
+    meta: { width: 220 },
   },
   {
     accessorKey: 'gridName',
-    header: ({ column }) => (
-      <Button variant="ghost" onClick={() => column.toggleSorting()}>
-        Grid Name
-        <ArrowUpDown />
-      </Button>
-    ),
-    cell: ({ row }) => <div>{row.getValue('gridName')}</div>,
+    header: renderSortableHeader('Grid Name'),
+    cell: ({ row }) => <TableCellText value={row.original.gridName} />,
     enableSorting: true,
     enableHiding: true,
+    meta: { width: 180 },
   },
   {
     id: 'details',
@@ -228,7 +216,9 @@ const columns: ColumnDef<SimulationOut>[] = [
         <Button
           variant="outline"
           size="sm"
-          onClick={() => {
+          className="h-9 rounded-lg border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          onClick={(event) => {
+            event.stopPropagation();
             window.location.href = `/simulations/${simulation.id}`;
           }}
         >
@@ -314,16 +304,12 @@ export const SimulationResultsTable = ({
   selectedSimulationIds,
   setSelectedSimulationIds,
   handleCompareButtonClick,
+  columnVisibility,
+  setColumnVisibility,
 }: SimulationResultsTable) => {
   // -------------------- Local State --------------------
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
-    ensembleMember: false,
-    gridResolution: false,
-    gridName: false,
-    compset: false,
-  });
 
   // -------------------- Derived Data --------------------
   const rowSelection = idsToRowSelection(selectedSimulationIds);
@@ -389,11 +375,14 @@ export const SimulationResultsTable = ({
   const sortedFilteredRows = table.getRowModel().rows;
   const pageStart = (page - 1) * pageSize;
   const paginatedRows = sortedFilteredRows.slice(pageStart, pageStart + pageSize);
+  const tableMinWidth = table.getVisibleLeafColumns().reduce((sum, column) => {
+    const meta = column.columnDef.meta as { width?: number } | undefined;
+    return sum + (meta?.width ?? 180);
+  }, 0);
 
   return (
-    <div className="w-full">
-      {/* Top controls */}
-      <div className="flex items-center py-4">
+    <div className="w-full min-w-0">
+      <div className="py-4">
         <BrowseToolbar
           simulations={simulations}
           buttonText="Compare"
@@ -402,99 +391,100 @@ export const SimulationResultsTable = ({
           setSelectedSimulationIds={setSelectedSimulationIds}
           isCompareButtonDisabled={isCompareButtonDisabled}
         />
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="ml-auto">
-              Columns <ChevronDown />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {table
-              .getAllColumns()
-              .filter((col) => col.getCanHide())
-              .map((col) => (
-                <DropdownMenuCheckboxItem
-                  key={col.id}
-                  className="capitalize"
-                  checked={col.getIsVisible()}
-                  onCheckedChange={(val) => col.toggleVisibility(!!val)}
-                >
-                  {col.id}
-                </DropdownMenuCheckboxItem>
-              ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
 
-      {/* Scroll container for sticky columns */}
-      <div className="rounded-md border overflow-x-auto w-full max-w-full"></div>
-      <Table className="min-w-max table-auto border-separate border-spacing-0 [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap">
-        <TableHeader>
-          {table.getHeaderGroups().map((hg) => (
-            <TableRow key={hg.id}>
-              {hg.headers.map((header) => {
-                const meta = header.column.columnDef.meta;
+      <div className="overflow-x-auto overflow-y-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <Table
+          className="w-full table-fixed border-separate border-spacing-0 [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap"
+          style={{ minWidth: tableMinWidth }}
+        >
+          <TableHeader className="bg-slate-50/95">
+            {table.getHeaderGroups().map((hg) => (
+              <TableRow key={hg.id} className="border-b border-slate-200 hover:bg-transparent">
+                {hg.headers.map((header) => {
+                  const meta = header.column.columnDef.meta;
 
-                const isSticky = meta?.sticky;
-                const left =
-                  meta?.position === 'left' ? getStickyLeftOffset(header, table) : undefined;
-                const right = meta?.position === 'right' ? 0 : undefined;
+                  const isSticky = meta?.sticky;
+                  const left =
+                    meta?.position === 'left' ? getStickyLeftOffset(header, table) : undefined;
+                  const right = meta?.position === 'right' ? 0 : undefined;
 
-                return (
-                  <TableHead
-                    key={header.id}
-                    className={isSticky ? 'sticky bg-background z-20' : undefined}
-                    style={{
-                      left,
-                      right,
-                      minWidth: meta?.width,
-                      maxWidth: meta?.width,
-                      width: meta?.width,
-                    }}
-                  >
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
-                  </TableHead>
-                );
-              })}
-            </TableRow>
-          ))}
-        </TableHeader>
-        <TableBody>
-          {paginatedRows.map((row) => (
-            <TableRow key={row.id}>
-              {row.getVisibleCells().map((cell) => {
-                const meta = cell.column.columnDef.meta;
-                const isSticky = meta?.sticky;
-                const left =
-                  meta?.position === 'left' ? getStickyLeftOffset(cell, table) : undefined;
-                const right = meta?.position === 'right' ? 0 : undefined;
+                  return (
+                    <TableHead
+                      key={header.id}
+                      className={
+                        isSticky
+                          ? 'sticky z-20 overflow-hidden border-b border-slate-200 bg-slate-50/95 shadow-[inset_0_-1px_0_0_rgba(226,232,240,1)]'
+                          : 'overflow-hidden border-b border-slate-200 bg-slate-50/95 shadow-[inset_0_-1px_0_0_rgba(226,232,240,1)]'
+                      }
+                      style={{
+                        left,
+                        right,
+                        minWidth: meta?.width,
+                        maxWidth: meta?.width,
+                        width: meta?.width,
+                      }}
+                    >
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
+                    </TableHead>
+                  );
+                })}
+              </TableRow>
+            ))}
+          </TableHeader>
+          <TableBody>
+            {paginatedRows.map((row) => (
+              <TableRow
+                key={row.id}
+                data-state={row.getIsSelected() ? 'selected' : undefined}
+                className="cursor-pointer border-b border-slate-100 hover:bg-slate-50/60 data-[state=selected]:bg-slate-50/80"
+                onClick={() => {
+                  const isSelected = row.getIsSelected();
+                  const canSelectMore =
+                    isSelected || Object.values(rowSelection).filter(Boolean).length < MAX_SELECTION;
 
-                return (
-                  <TableCell
-                    key={cell.id}
-                    className={isSticky ? 'sticky bg-background z-10' : undefined}
-                    style={{
-                      left,
-                      right,
-                      minWidth: meta?.width,
-                      maxWidth: meta?.width,
-                      width: meta?.width,
-                    }}
-                  >
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
-                );
-              })}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+                  if (canSelectMore) {
+                    row.toggleSelected(!isSelected);
+                  }
+                }}
+              >
+                {row.getVisibleCells().map((cell) => {
+                  const meta = cell.column.columnDef.meta;
+                  const isSticky = meta?.sticky;
+                  const left =
+                    meta?.position === 'left' ? getStickyLeftOffset(cell, table) : undefined;
+                  const right = meta?.position === 'right' ? 0 : undefined;
+
+                  return (
+                    <TableCell
+                      key={cell.id}
+                      className={
+                        isSticky
+                          ? 'sticky z-10 overflow-hidden bg-white align-middle text-slate-700'
+                          : 'overflow-hidden align-middle text-slate-700'
+                      }
+                      style={{
+                        left,
+                        right,
+                        minWidth: meta?.width,
+                        maxWidth: meta?.width,
+                        width: meta?.width,
+                      }}
+                    >
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </TableCell>
+                  );
+                })}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
 
       <div className="flex items-center justify-end space-x-2 py-4">
-        <div className="text-muted-foreground flex-1 text-sm">
+        <div className="flex-1 text-sm text-slate-500">
           {selectedSimulationIds.length} of {filteredData.length} row(s) selected.
         </div>
       </div>
