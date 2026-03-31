@@ -101,6 +101,8 @@ def ingest_archive(
     archive_path: Path | str,
     output_dir: Path | str,
     db: Session,
+    *,
+    strict_validation: bool = False,
 ) -> IngestArchiveResult:
     """Ingest a simulation archive and return summary counts.
 
@@ -147,7 +149,9 @@ def ingest_archive(
     )
 
     parsed_simulations, skipped_count = main_parser(
-        archive_path_resolved, output_dir_resolved
+        archive_path_resolved,
+        output_dir_resolved,
+        strict_validation=strict_validation,
     )
 
     if not parsed_simulations:
