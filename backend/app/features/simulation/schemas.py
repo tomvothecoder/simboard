@@ -251,7 +251,7 @@ class SimulationCreate(CamelInBaseModel):
             None,
             description=(
                 "Configuration differences between this simulation and the "
-                "canonical baseline for the same case. None for canonical "
+                "reference simulation for the same case. None for reference "
                 "simulations or when no differences exist."
             ),
         ),
@@ -297,11 +297,11 @@ class SimulationSummaryOut(CamelOutBaseModel):
     status: Annotated[
         SimulationStatus, Field(..., description="Current status of the simulation")
     ]
-    is_canonical: Annotated[
+    is_reference: Annotated[
         bool,
         Field(
             ...,
-            description="Whether this simulation is the canonical baseline for its case",
+            description="Whether this simulation is the reference for its case",
         ),
     ]
     change_count: Annotated[
@@ -309,8 +309,8 @@ class SimulationSummaryOut(CamelOutBaseModel):
         Field(
             ...,
             description=(
-                "Number of configuration differences vs the canonical baseline. "
-                "0 for canonical simulations."
+                "Number of configuration differences vs the reference simulation. "
+                "0 for reference simulations."
             ),
         ),
     ]
@@ -337,9 +337,9 @@ class CaseOut(CamelOutBaseModel):
             ),
         ),
     ]
-    canonical_simulation_id: Annotated[
+    reference_simulation_id: Annotated[
         UUID | None,
-        Field(None, description="ID of the canonical simulation for this case."),
+        Field(None, description="ID of the reference simulation for this case."),
     ]
     simulations: Annotated[
         list[SimulationSummaryOut],
@@ -404,11 +404,11 @@ class SimulationOut(CamelOutBaseModel):
             ),
         ),
     ]
-    is_canonical: Annotated[
+    is_reference: Annotated[
         bool,
         Field(
             ...,
-            description="Whether this simulation is the canonical baseline for its case",
+            description="Whether this simulation is the reference for its case",
         ),
     ]
     change_count: Annotated[
@@ -416,8 +416,8 @@ class SimulationOut(CamelOutBaseModel):
         Field(
             ...,
             description=(
-                "Number of configuration differences vs the canonical baseline. "
-                "0 for canonical simulations."
+                "Number of configuration differences vs the reference simulation. "
+                "0 for reference simulations."
             ),
         ),
     ]
@@ -566,7 +566,7 @@ class SimulationOut(CamelOutBaseModel):
             None,
             description=(
                 "Configuration differences between this simulation and the "
-                "canonical baseline for the same case. None for canonical "
+                "reference simulation for the same case. None for reference "
                 "simulations or when no differences exist."
             ),
         ),
