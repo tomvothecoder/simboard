@@ -1,15 +1,21 @@
 from collections.abc import Generator
-from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
+from unittest.mock import ANY, AsyncMock, patch
+from urllib.parse import parse_qs, urlparse
 
 import pytest
-from fastapi import status
+from fastapi import HTTPException, status
 from fastapi.dependencies.models import Dependant
+from fastapi.responses import RedirectResponse
 from fastapi.routing import APIRoute
+from fastapi_users.exceptions import UserAlreadyExists
+from fastapi_users.router.oauth import STATE_TOKEN_AUDIENCE, decode_jwt
 from httpx import AsyncClient
+from starlette.requests import Request
 
 from app.api.version import API_BASE
 from app.core.config import settings
-from app.features.user.auth import oauth
+from app.features.user.api import oauth
 from app.features.user.manager import current_active_user
 from app.features.user.models import UserRole
 from app.main import app
@@ -53,6 +59,27 @@ class TestAuthRoutes:
         )
         assert "github" in response.text.lower() or "oauth" in response.text.lower()
 
+    async def test_github_oauth_authorize_embeds_return_to_in_state(
+        self, async_client: AsyncClient
+    ) -> None:
+        return_to = "https://127.0.0.1:5173/simulations/test-run?tab=summary"
+
+        response = await async_client.get(
+            f"{API_BASE}/auth/github/authorize",
+            params={"return_to": return_to},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        authorization_url = response.json()["authorization_url"]
+        state = parse_qs(urlparse(authorization_url).query)["state"][0]
+        state_data = decode_jwt(
+            state,
+            settings.github_state_secret_key,
+            [STATE_TOKEN_AUDIENCE],
+        )
+
+        assert state_data["return_to"] == return_to
+
     async def test_github_oauth_callback_invalid_state(
         self, async_client: AsyncClient
     ) -> None:
@@ -75,6 +102,131 @@ class TestAuthRoutes:
 
         # Depending on cookie/JWT config, FastAPI-Users may redirect or just 400
         assert response.status_code in (200, 307, 400)
+
+    async def test_github_oauth_callback_rejects_missing_email(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            oauth.GITHUB_OAUTH_CLIENT,
+            "get_id_email",
+            AsyncMock(return_value=("mock_account_id", None)),
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await oauth.github_callback(
+                Request({"type": "http", "headers": []}),
+                access_token_state=({"access_token": "fake_token"}, "valid-state"),
+                user_manager=SimpleNamespace(),
+                strategy=object(),
+            )
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert exc_info.value.detail == oauth.ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL
+
+    async def test_github_oauth_callback_rejects_missing_state(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            oauth.GITHUB_OAUTH_CLIENT,
+            "get_id_email",
+            AsyncMock(return_value=("mock_account_id", "mockuser@example.com")),
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await oauth.github_callback(
+                Request({"type": "http", "headers": []}),
+                access_token_state=({"access_token": "fake_token"}, None),
+                user_manager=SimpleNamespace(),
+                strategy=object(),
+            )
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+
+    async def test_github_oauth_callback_rejects_existing_user_conflict(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            oauth.GITHUB_OAUTH_CLIENT,
+            "get_id_email",
+            AsyncMock(return_value=("mock_account_id", "mockuser@example.com")),
+        )
+        monkeypatch.setattr(oauth, "decode_jwt", lambda *_args, **_kwargs: {})
+        user_manager = SimpleNamespace(
+            oauth_callback=AsyncMock(side_effect=UserAlreadyExists()),
+            on_after_login=AsyncMock(),
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await oauth.github_callback(
+                Request({"type": "http", "headers": []}),
+                access_token_state=({"access_token": "fake_token"}, "valid-state"),
+                user_manager=user_manager,
+                strategy=object(),
+            )
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert exc_info.value.detail == oauth.ErrorCode.OAUTH_USER_ALREADY_EXISTS
+
+    async def test_github_oauth_callback_rejects_inactive_user(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            oauth.GITHUB_OAUTH_CLIENT,
+            "get_id_email",
+            AsyncMock(return_value=("mock_account_id", "mockuser@example.com")),
+        )
+        monkeypatch.setattr(oauth, "decode_jwt", lambda *_args, **_kwargs: {})
+        user_manager = SimpleNamespace(
+            oauth_callback=AsyncMock(return_value=SimpleNamespace(is_active=False)),
+            on_after_login=AsyncMock(),
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await oauth.github_callback(
+                Request({"type": "http", "headers": []}),
+                access_token_state=({"access_token": "fake_token"}, "valid-state"),
+                user_manager=user_manager,
+                strategy=object(),
+            )
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert exc_info.value.detail == oauth.ErrorCode.LOGIN_BAD_CREDENTIALS
+
+    async def test_github_oauth_callback_logs_in_and_redirects(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        return_to = "https://127.0.0.1:5173/simulations/test-run?tab=summary"
+        monkeypatch.setattr(
+            oauth.GITHUB_OAUTH_CLIENT,
+            "get_id_email",
+            AsyncMock(return_value=("mock_account_id", "mockuser@example.com")),
+        )
+        monkeypatch.setattr(
+            oauth, "decode_jwt", lambda *_args, **_kwargs: {"return_to": return_to}
+        )
+        monkeypatch.setattr(
+            oauth.GITHUB_OAUTH_BACKEND,
+            "login",
+            AsyncMock(return_value=RedirectResponse("/", status_code=302)),
+        )
+        user = SimpleNamespace(is_active=True)
+        user_manager = SimpleNamespace(
+            oauth_callback=AsyncMock(return_value=user),
+            on_after_login=AsyncMock(),
+        )
+
+        response = await oauth.github_callback(
+            Request({"type": "http", "headers": []}),
+            access_token_state=({"access_token": "fake_token"}, "valid-state"),
+            user_manager=user_manager,
+            strategy=object(),
+        )
+
+        assert response.status_code == status.HTTP_302_FOUND
+        assert response.headers["location"].endswith(
+            "auth/callback?return_to=https%3A%2F%2F127.0.0.1%3A5173%2Fsimulations%2Ftest-run%3Ftab%3Dsummary"
+        )
+        user_manager.on_after_login.assert_awaited_once_with(user, ANY, response)
 
 
 class TestLogOutRoute:

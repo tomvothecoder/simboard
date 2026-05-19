@@ -3,7 +3,12 @@ from fastapi import Response
 from fastapi.responses import RedirectResponse
 
 from app.core.config import settings
-from app.features.user.auth.oauth import CustomCookieTransport
+from app.features.user.auth import oauth
+from app.features.user.auth.oauth import (
+    CustomCookieTransport,
+    _build_frontend_auth_redirect_url,
+    _normalize_post_login_return_to,
+)
 
 
 @pytest.mark.asyncio
@@ -80,3 +85,85 @@ async def test_get_login_response_with_different_settings(monkeypatch):
     assert "HttpOnly" not in set_cookie
     assert "Max-Age=100" in set_cookie
     assert "SameSite=strict" in set_cookie
+
+
+def test_normalize_post_login_return_to_accepts_allowed_frontend_origin(monkeypatch):
+    monkeypatch.setattr(
+        settings,
+        "frontend_origins",
+        "https://127.0.0.1:5173,https://localhost:5173",
+    )
+
+    assert (
+        _normalize_post_login_return_to(
+            "https://127.0.0.1:5173/simulations/123?tab=1#rail"
+        )
+        == "https://127.0.0.1:5173/simulations/123?tab=1#rail"
+    )
+
+
+def test_normalize_post_login_return_to_rejects_unapproved_origin(monkeypatch):
+    monkeypatch.setattr(settings, "frontend_origins", "https://127.0.0.1:5173")
+
+    assert (
+        _normalize_post_login_return_to("https://evil.example.com/simulations/123")
+        is None
+    )
+
+
+def test_normalize_post_login_return_to_rejects_invalid_url_parse(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(settings, "frontend_origins", "https://127.0.0.1:5173")
+    monkeypatch.setattr(
+        oauth, "urlparse", lambda _: (_ for _ in ()).throw(ValueError())
+    )
+
+    assert _normalize_post_login_return_to("not-a-url") is None
+
+
+@pytest.mark.parametrize(
+    "return_to",
+    [
+        "mailto:user@example.com",
+        "https:///missing-host",
+        "https://127.0.0.1:5173//double-slash",
+    ],
+)
+def test_normalize_post_login_return_to_rejects_invalid_url_shapes(
+    monkeypatch: pytest.MonkeyPatch, return_to: str
+):
+    monkeypatch.setattr(settings, "frontend_origins", "https://127.0.0.1:5173")
+
+    assert _normalize_post_login_return_to(return_to) is None
+
+
+@pytest.mark.parametrize(
+    "return_to",
+    [
+        "https://127.0.0.1:5173/auth/callback/",
+        "https://127.0.0.1:5173/auth/callback/anything",
+    ],
+)
+def test_normalize_post_login_return_to_rejects_callback_prefixed_paths(
+    monkeypatch, return_to: str
+):
+    monkeypatch.setattr(settings, "frontend_origins", "https://127.0.0.1:5173")
+
+    assert _normalize_post_login_return_to(return_to) is None
+
+
+def test_build_frontend_auth_redirect_url_appends_return_to(monkeypatch):
+    monkeypatch.setattr(
+        settings, "frontend_auth_redirect_url", "https://127.0.0.1:5173/auth/callback"
+    )
+    monkeypatch.setattr(settings, "frontend_origins", "https://127.0.0.1:5173")
+
+    redirect_url = _build_frontend_auth_redirect_url(
+        "https://127.0.0.1:5173/simulations/123?tab=summary"
+    )
+
+    assert (
+        redirect_url
+        == "https://127.0.0.1:5173/auth/callback?return_to=https%3A%2F%2F127.0.0.1%3A5173%2Fsimulations%2F123%3Ftab%3Dsummary"
+    )
