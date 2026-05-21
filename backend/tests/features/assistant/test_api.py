@@ -1,3 +1,4 @@
+from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -207,7 +208,10 @@ class TestSummarizeSimulationUnit:
             is_verified=True,
             role=UserRole.USER,
         )
-        db = _FakeAsyncSession(type("SimulationStub", (), {"id": sim_id})())
+        db = cast(
+            AsyncSession,
+            _FakeAsyncSession(type("SimulationStub", (), {"id": sim_id})()),
+        )
         summary = SimulationSummaryResponse(
             answer="Deterministic assistant summary.",
             citations=[],
@@ -272,7 +276,10 @@ class TestSummarizeSimulationUnit:
             is_verified=True,
             role=UserRole.USER,
         )
-        db = _FakeAsyncSession(type("SimulationStub", (), {"id": sim_id})())
+        db = cast(
+            AsyncSession,
+            _FakeAsyncSession(type("SimulationStub", (), {"id": sim_id})()),
+        )
         summary = SimulationSummaryResponse(
             answer="Deterministic fallback summary.",
             citations=[],
@@ -334,7 +341,10 @@ class TestSummarizeSimulationUnit:
             is_verified=True,
             role=UserRole.USER,
         )
-        db = _FakeAsyncSession(type("SimulationStub", (), {"id": sim_id})())
+        db = cast(
+            AsyncSession,
+            _FakeAsyncSession(type("SimulationStub", (), {"id": sim_id})()),
+        )
         summary = SimulationSummaryResponse(
             answer="LLM assistant summary.",
             citations=[],
@@ -397,7 +407,7 @@ class TestSummarizeSimulationUnit:
             is_verified=True,
             role=UserRole.USER,
         )
-        db = _FakeAsyncSession(None)
+        db = cast(AsyncSession, _FakeAsyncSession(None))
         logged: list[tuple[str, tuple[object, ...]]] = []
 
         monkeypatch.setattr(assistant_api, "uuid4", lambda: trace_id)
