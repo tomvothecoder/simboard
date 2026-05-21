@@ -142,14 +142,13 @@ class Settings(BaseSettings):
 
     # --- Assistant LLM config ---
     assistant_llm_enabled: bool = False
-    assistant_llm_provider: Literal["openai", "anthropic", "livai"] = "openai"
-    assistant_openai_api_key: SecretStr | None = None
-    assistant_openai_model: str | None = None
-    assistant_anthropic_api_key: SecretStr | None = None
-    assistant_anthropic_model: str | None = None
+    assistant_llm_provider: Literal["livai", "ollama"] = "ollama"
     assistant_livai_api_key: SecretStr | None = None
     assistant_livai_model: str | None = None
     assistant_livai_base_url: str = "https://livai-api.llnl.gov/"
+    assistant_ollama_api_key: SecretStr | None = None
+    assistant_ollama_model: str | None = None
+    assistant_ollama_base_url: str = "http://localhost:11434"
     assistant_llm_timeout_seconds: float = 30.0
     assistant_llm_temperature: float = 0.2
     assistant_llm_max_tokens: int = 2048
@@ -159,6 +158,11 @@ class Settings(BaseSettings):
     @classmethod
     def _strip_livai_base_url(cls, value: str) -> str:
         return value.strip()
+
+    @field_validator("assistant_ollama_base_url", mode="before")
+    @classmethod
+    def _strip_ollama_base_url(cls, value: str) -> str:
+        return value.strip().rstrip("/")
 
 
 settings = Settings()

@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass
 from time import perf_counter
 
 from pydantic import ValidationError
+from pydantic_ai.exceptions import (
+    ModelAPIError,
+    ModelHTTPError,
+    UnexpectedModelBehavior,
+)
 
 from app.core.config import settings
 from app.features.assistant.llm_generator import AssistantLLMConfig, SummaryLLMGenerator
@@ -60,6 +67,12 @@ _SNAPSHOT_PATH_ACCESSORS = {
     else None,
 }
 
+_INLINE_CITATION_RE = re.compile(
+    r"\s*\[(?:simulation|case|machine|artifacts|links)[^\]]+\]"
+)
+_MULTISPACE_RE = re.compile(r"\s+")
+_SPACE_BEFORE_PUNCT_RE = re.compile(r"\s+([,.;:])")
+
 
 @dataclass(frozen=True)
 class SummaryGenerationResult:
@@ -70,112 +83,118 @@ class SummaryGenerationResult:
     attempted_model: str | None
 
 
-def _standardize_citations(
-    citations: list[SummaryCitationOut],
-    snapshot: SimulationSnapshot,
-) -> list[SummaryCitationOut]:
-    normalized: list[SummaryCitationOut] = []
-    for citation in citations:
-        if citation.path not in VALID_CITATION_PATHS:
-            raise ValueError(f"invalid_citation_path:{citation.path}")
-        if not snapshot_has_citation_path(snapshot, citation.path):
-            raise ValueError(f"missing_citation_path:{citation.path}")
-        entry = get_citation_entry(citation.path)
-        normalized.append(
-            SummaryCitationOut(
-                source_type=entry.source_type,
-                path=citation.path,
-                label=entry.label,
-            )
+async def generate_simulation_summary(
+    simulation: Simulation,
+) -> SummaryGenerationResult:
+    attempted_provider: SummaryGenerationProvider | None = None
+    attempted_model: str | None = None
+
+    if settings.assistant_llm_enabled:
+        attempted_provider = settings.assistant_llm_provider
+        attempted_model = _configured_model_name(settings.assistant_llm_provider)
+
+    try:
+        snapshot = build_simulation_snapshot(simulation)
+    except SnapshotBudgetExceededError as exc:
+        result = SummaryGenerationResult(
+            summary=_build_deterministic_response(
+                exc.snapshot,
+                include_fallback_caveat=settings.assistant_llm_enabled,
+            ).model_copy(update={"fallback_used": settings.assistant_llm_enabled}),
+            fallback_reason=str(exc)
+            if settings.assistant_llm_enabled
+            else "llm_disabled",
+            llm_latency_ms=0.0,
+            attempted_provider=attempted_provider,
+            attempted_model=attempted_model,
         )
-    return normalized
 
+        return result
 
-def _merge_unique_strings(*groups: list[str]) -> list[str]:
-    seen: set[str] = set()
-    merged: list[str] = []
-    for group in groups:
-        for item in group:
-            if item not in seen:
-                seen.add(item)
-                merged.append(item)
-    return merged
-
-
-def _validate_llm_content(
-    content: SimulationSummaryContent,
-    snapshot: SimulationSnapshot,
-) -> SimulationSummaryContent:
-    if not content.answer.strip():
-        raise ValueError("empty_answer")
-    if not content.citations:
-        raise ValueError("missing_citations")
-    if not content.limitations:
-        raise ValueError("missing_limitations")
-    if not content.suggested_followups:
-        raise ValueError("missing_followups")
-
-    return content.model_copy(
-        update={
-            "citations": _standardize_citations(content.citations, snapshot),
-            "caveats": _merge_unique_strings(
-                snapshot.snapshot_caveats, content.caveats
+    if not settings.assistant_llm_enabled:
+        result = SummaryGenerationResult(
+            summary=_build_deterministic_response(
+                snapshot,
+                include_fallback_caveat=False,
             ),
-            "limitations": _merge_unique_strings(content.limitations, LLM_LIMITATIONS),
-        }
+            fallback_reason="llm_disabled",
+            llm_latency_ms=0.0,
+            attempted_provider=None,
+            attempted_model=None,
+        )
+
+        return result
+
+    try:
+        config = _resolve_llm_config()
+        attempted_provider = config.provider
+        attempted_model = config.model_name
+        generator = SummaryLLMGenerator(config)
+    except ValueError as exc:
+        result = SummaryGenerationResult(
+            summary=_build_deterministic_response(
+                snapshot,
+                include_fallback_caveat=True,
+            ).model_copy(update={"fallback_used": True}),
+            fallback_reason=str(exc),
+            llm_latency_ms=0.0,
+            attempted_provider=attempted_provider,
+            attempted_model=attempted_model,
+        )
+
+        return result
+
+    start = perf_counter()
+    try:
+        llm_content = await generator.generate(snapshot)
+        llm_content = _fill_missing_llm_followups(llm_content, snapshot)
+        validated = _validate_llm_content(llm_content, snapshot)
+
+        response = SimulationSummaryResponse(
+            **validated.model_dump(),
+            generation_mode="llm",
+            fallback_used=False,
+            generation_provider=config.provider,
+            generation_model=config.model_name,
+            trace_id="00000000-0000-0000-0000-000000000000",
+        )
+        result = SummaryGenerationResult(
+            summary=response,
+            fallback_reason=None,
+            llm_latency_ms=(perf_counter() - start) * 1000,
+            attempted_provider=config.provider,
+            attempted_model=config.model_name,
+        )
+
+        return result
+    except (ValidationError, ValueError) as exc:
+        fallback_reason = getattr(exc, "args", ["llm_validation_failed"])[0]
+    except Exception as exc:  # pragma: no cover - exercised via patched tests
+        fallback_reason = _format_model_error(exc)
+
+    result = SummaryGenerationResult(
+        summary=_build_deterministic_response(
+            snapshot,
+            include_fallback_caveat=True,
+        ).model_copy(update={"fallback_used": True}),
+        fallback_reason=str(fallback_reason),
+        llm_latency_ms=(perf_counter() - start) * 1000,
+        attempted_provider=config.provider,
+        attempted_model=config.model_name,
     )
 
+    return result
 
-def _build_deterministic_response(
-    snapshot: SimulationSnapshot,
-    *,
-    include_fallback_caveat: bool,
-) -> SimulationSummaryResponse:
-    base = build_simulation_summary(
-        snapshot,
-        include_fallback_caveat=include_fallback_caveat,
-    )
-    return base.model_copy(
-        update={
-            "generation_mode": "deterministic",
-            "generation_provider": None,
-            "generation_model": None,
-        }
-    )
+
+def _configured_model_name(provider: SummaryGenerationProvider) -> str | None:
+    if provider == "livai":
+        return settings.assistant_livai_model
+
+    return settings.assistant_ollama_model
 
 
 def _resolve_llm_config() -> AssistantLLMConfig:
     provider = settings.assistant_llm_provider
-    if provider == "openai":
-        if (
-            settings.assistant_openai_api_key is None
-            or not settings.assistant_openai_model
-        ):
-            raise ValueError("openai_misconfigured")
-        return AssistantLLMConfig(
-            provider="openai",
-            model_name=settings.assistant_openai_model,
-            api_key=settings.assistant_openai_api_key,
-            timeout_seconds=settings.assistant_llm_timeout_seconds,
-            temperature=settings.assistant_llm_temperature,
-            max_tokens=settings.assistant_llm_max_tokens,
-        )
-
-    if provider == "anthropic":
-        if (
-            settings.assistant_anthropic_api_key is None
-            or not settings.assistant_anthropic_model
-        ):
-            raise ValueError("anthropic_misconfigured")
-        return AssistantLLMConfig(
-            provider="anthropic",
-            model_name=settings.assistant_anthropic_model,
-            api_key=settings.assistant_anthropic_api_key,
-            timeout_seconds=settings.assistant_llm_timeout_seconds,
-            temperature=settings.assistant_llm_temperature,
-            max_tokens=settings.assistant_llm_max_tokens,
-        )
-
     if provider == "livai":
         if (
             settings.assistant_livai_api_key is None
@@ -193,115 +212,201 @@ def _resolve_llm_config() -> AssistantLLMConfig:
             base_url=settings.assistant_livai_base_url,
         )
 
+    if provider == "ollama":
+        if (
+            not settings.assistant_ollama_model
+            or not settings.assistant_ollama_base_url
+        ):
+            raise ValueError("ollama_misconfigured")
+        return AssistantLLMConfig(
+            provider="ollama",
+            model_name=settings.assistant_ollama_model,
+            api_key=settings.assistant_ollama_api_key,
+            timeout_seconds=settings.assistant_llm_timeout_seconds,
+            temperature=settings.assistant_llm_temperature,
+            max_tokens=settings.assistant_llm_max_tokens,
+            base_url=settings.assistant_ollama_base_url,
+        )
+
     raise ValueError("unsupported_provider")
 
 
-def _configured_model_name(provider: SummaryGenerationProvider) -> str | None:
-    if provider == "openai":
-        return settings.assistant_openai_model
-    if provider == "anthropic":
-        return settings.assistant_anthropic_model
-    return settings.assistant_livai_model
+def _standardize_citations(
+    citations: list[SummaryCitationOut],
+    snapshot: SimulationSnapshot,
+) -> list[SummaryCitationOut]:
+    normalized: list[SummaryCitationOut] = []
 
-
-async def generate_simulation_summary(
-    simulation: Simulation,
-) -> SummaryGenerationResult:
-    attempted_provider: SummaryGenerationProvider | None = None
-    attempted_model: str | None = None
-
-    if settings.assistant_llm_enabled:
-        attempted_provider = settings.assistant_llm_provider
-        attempted_model = _configured_model_name(settings.assistant_llm_provider)
-
-    try:
-        snapshot = build_simulation_snapshot(simulation)
-    except SnapshotBudgetExceededError as exc:
-        return SummaryGenerationResult(
-            summary=_build_deterministic_response(
-                exc.snapshot,
-                include_fallback_caveat=settings.assistant_llm_enabled,
-            ),
-            fallback_reason=str(exc)
-            if settings.assistant_llm_enabled
-            else "llm_disabled",
-            llm_latency_ms=0.0,
-            attempted_provider=attempted_provider,
-            attempted_model=attempted_model,
+    for citation in citations:
+        canonical_path = _canonicalize_citation_path(
+            citation.path,
+            citation.source_type,
         )
 
-    if not settings.assistant_llm_enabled:
-        return SummaryGenerationResult(
-            summary=_build_deterministic_response(
-                snapshot,
-                include_fallback_caveat=False,
-            ),
-            fallback_reason="llm_disabled",
-            llm_latency_ms=0.0,
-            attempted_provider=None,
-            attempted_model=None,
+        if not _snapshot_has_citation_path(snapshot, canonical_path):
+            raise ValueError(f"missing_citation_path:{canonical_path}")
+
+        entry = get_citation_entry(canonical_path)
+
+        normalized.append(
+            SummaryCitationOut(
+                source_type=entry.source_type,
+                path=canonical_path,
+                label=entry.label,
+            )
         )
-
-    try:
-        config = _resolve_llm_config()
-        attempted_provider = config.provider
-        attempted_model = config.model_name
-        generator = SummaryLLMGenerator(config)
-    except ValueError as exc:
-        return SummaryGenerationResult(
-            summary=_build_deterministic_response(
-                snapshot,
-                include_fallback_caveat=True,
-            ),
-            fallback_reason=str(exc),
-            llm_latency_ms=0.0,
-            attempted_provider=attempted_provider,
-            attempted_model=attempted_model,
-        )
-
-    start = perf_counter()
-    try:
-        llm_content = await generator.generate(snapshot)
-        validated = _validate_llm_content(llm_content, snapshot)
-        response = SimulationSummaryResponse(
-            **validated.model_dump(),
-            generation_mode="llm",
-            generation_provider=config.provider,
-            generation_model=config.model_name,
-            trace_id="00000000-0000-0000-0000-000000000000",
-        )
-        return SummaryGenerationResult(
-            summary=response,
-            fallback_reason=None,
-            llm_latency_ms=(perf_counter() - start) * 1000,
-            attempted_provider=config.provider,
-            attempted_model=config.model_name,
-        )
-    except (ValidationError, ValueError) as exc:
-        fallback_reason = getattr(exc, "args", ["llm_validation_failed"])[0]
-    except Exception as exc:  # pragma: no cover - exercised via patched tests
-        fallback_reason = exc.__class__.__name__
-
-    return SummaryGenerationResult(
-        summary=_build_deterministic_response(
-            snapshot,
-            include_fallback_caveat=True,
-        ),
-        fallback_reason=str(fallback_reason),
-        llm_latency_ms=(perf_counter() - start) * 1000,
-        attempted_provider=config.provider,
-        attempted_model=config.model_name,
-    )
+    return normalized
 
 
-def snapshot_has_citation_path(snapshot: SimulationSnapshot, path: str) -> bool:
+def _canonicalize_citation_path(path: str, source_type: str | None = None) -> str:
+    normalized = path.strip()
+
+    if normalized in VALID_CITATION_PATHS:
+        return normalized
+
+    matches = [
+        candidate
+        for candidate in VALID_CITATION_PATHS
+        if candidate.endswith(f".{normalized}")
+    ]
+
+    if source_type is not None:
+        typed_matches = [
+            candidate
+            for candidate in matches
+            if get_citation_entry(candidate).source_type == source_type
+        ]
+
+        if len(typed_matches) == 1:
+            return typed_matches[0]
+
+    if len(matches) == 1:
+        return matches[0]
+
+    raise ValueError(f"invalid_citation_path:{path}")
+
+
+def _snapshot_has_citation_path(snapshot: SimulationSnapshot, path: str) -> bool:
     accessor = _SNAPSHOT_PATH_ACCESSORS.get(path)
+
     if accessor is not None:
         return bool(accessor(snapshot))
+
     if path.startswith("artifacts[kind="):
         kind = path[len("artifacts[kind=") : -1]
+
         return any(item.kind == kind for item in snapshot.artifacts)
     if path.startswith("links[kind="):
         kind = path[len("links[kind=") : -1]
+
         return any(item.kind == kind for item in snapshot.links)
+
     return False
+
+
+def _merge_unique_strings(*groups: list[str]) -> list[str]:
+    seen: set[str] = set()
+    merged: list[str] = []
+
+    for group in groups:
+        for item in group:
+            if item not in seen:
+                seen.add(item)
+                merged.append(item)
+
+    return merged
+
+
+def _validate_llm_content(
+    content: SimulationSummaryContent,
+    snapshot: SimulationSnapshot,
+) -> SimulationSummaryContent:
+    normalized_answer = _normalize_llm_answer(content.answer)
+
+    if not normalized_answer:
+        raise ValueError("empty_answer")
+    if not content.citations:
+        raise ValueError("missing_citations")
+    if not content.limitations:
+        raise ValueError("missing_limitations")
+    if not content.suggested_followups:
+        raise ValueError("missing_followups")
+
+    return content.model_copy(
+        update={
+            "answer": normalized_answer,
+            "citations": _standardize_citations(content.citations, snapshot),
+            "caveats": _merge_unique_strings(
+                snapshot.snapshot_caveats, content.caveats
+            ),
+            "limitations": _merge_unique_strings(content.limitations, LLM_LIMITATIONS),
+        }
+    )
+
+
+def _normalize_llm_answer(answer: str) -> str:
+    cleaned = _INLINE_CITATION_RE.sub("", answer)
+    cleaned = _MULTISPACE_RE.sub(" ", cleaned).strip()
+    cleaned = _SPACE_BEFORE_PUNCT_RE.sub(r"\1", cleaned)
+
+    return cleaned
+
+
+def _build_deterministic_response(
+    snapshot: SimulationSnapshot,
+    *,
+    include_fallback_caveat: bool,
+) -> SimulationSummaryResponse:
+    base = build_simulation_summary(
+        snapshot,
+        include_fallback_caveat=include_fallback_caveat,
+    )
+
+    return base.model_copy(
+        update={
+            "generation_mode": "deterministic",
+            "generation_provider": None,
+            "generation_model": None,
+        }
+    )
+
+
+def _fill_missing_llm_followups(
+    content: SimulationSummaryContent,
+    snapshot: SimulationSnapshot,
+) -> SimulationSummaryContent:
+    if content.suggested_followups:
+        return content
+
+    fallback_summary = build_simulation_summary(snapshot)
+
+    return content.model_copy(
+        update={"suggested_followups": fallback_summary.suggested_followups}
+    )
+
+
+def _format_model_error(exc: Exception) -> str:
+    if isinstance(exc, ModelHTTPError):
+        body = exc.body
+
+        if body is not None and not isinstance(body, str):
+            body = json.dumps(body, sort_keys=True)
+        return _trim_fallback_reason(
+            f"{exc.__class__.__name__}: status_code={exc.status_code}; body={body}"
+        )
+
+    if isinstance(exc, (ModelAPIError, UnexpectedModelBehavior)):
+        return _trim_fallback_reason(f"{exc.__class__.__name__}: {exc}")
+
+    message = str(exc).strip()
+    if not message:
+        return exc.__class__.__name__
+
+    return _trim_fallback_reason(f"{exc.__class__.__name__}: {message}")
+
+
+def _trim_fallback_reason(value: str, limit: int = 500) -> str:
+    if len(value) <= limit:
+        return value
+
+    return f"{value[: limit - 3]}..."

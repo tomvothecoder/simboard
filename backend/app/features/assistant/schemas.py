@@ -24,7 +24,7 @@ class SummaryCitationOut(CamelOutBaseModel):
 
 
 SummaryGenerationMode = Literal["llm", "deterministic"]
-SummaryGenerationProvider = Literal["openai", "anthropic", "livai"]
+SummaryGenerationProvider = Literal["livai", "ollama"]
 
 
 class SimulationSummaryContent(CamelOutBaseModel):
@@ -61,6 +61,10 @@ class SimulationSummaryResponse(SimulationSummaryContent):
     generation_mode: SummaryGenerationMode = Field(
         ...,
         description="Whether the summary came from the LLM path or deterministic fallback.",
+    )
+    fallback_used: bool = Field(
+        default=False,
+        description="Whether this summary came from an attempted LLM generation that fell back to deterministic output.",
     )
     generation_provider: SummaryGenerationProvider | None = Field(
         ...,

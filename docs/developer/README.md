@@ -61,61 +61,110 @@ For token-based ingestion and service-account details, see [docs/hpc_api_token_a
 
 ## Assistant LLM Env Setup
 
-If you want the simulation details page to use LLM-backed summaries instead of deterministic fallback, configure the assistant env values in `.envs/local/backend.env`.
+Configure `.envs/local/backend.env` to enable LLM-backed summaries on the simulation details page. If LLM support is disabled or misconfigured, the backend falls back to the deterministic metadata summary.
 
-Canonical assistant env names:
+### Required settings
 
-- `ASSISTANT_LLM_ENABLED`
-- `ASSISTANT_LLM_PROVIDER` with `openai`, `anthropic`, or `livai`
-- `ASSISTANT_OPENAI_API_KEY` / `ASSISTANT_OPENAI_MODEL`
-- `ASSISTANT_ANTHROPIC_API_KEY` / `ASSISTANT_ANTHROPIC_MODEL`
-- `ASSISTANT_LIVAI_API_KEY` / `ASSISTANT_LIVAI_MODEL` / `ASSISTANT_LIVAI_BASE_URL`
-- `ASSISTANT_LLM_TEMPERATURE` default `0.2`
-- `ASSISTANT_LLM_MAX_TOKENS` default `2048`
+```env
+ASSISTANT_LLM_ENABLED=true
+ASSISTANT_LLM_PROVIDER=ollama  # ollama or livai
+```
 
-Recommended setup flow:
+Use exactly one provider and configure only that provider's env vars.
 
-1. Open `.envs/local/backend.env`.
-2. Set `ASSISTANT_LLM_ENABLED=true`.
-3. Choose exactly one provider in `ASSISTANT_LLM_PROVIDER`.
-4. Fill only that provider's required env vars.
-5. Restart the backend with `make backend-run`.
-6. Generate an AI Summary from the simulation details page and confirm it does not fall back to deterministic mode.
+### Local Ollama setup
 
-Recommended local default for this repo:
+Recommended local default:
+
+```env
+ASSISTANT_LLM_ENABLED=true
+ASSISTANT_LLM_PROVIDER=ollama
+ASSISTANT_OLLAMA_BASE_URL=http://localhost:11434
+ASSISTANT_OLLAMA_MODEL=llama3.1:8b
+ASSISTANT_OLLAMA_API_KEY=
+ASSISTANT_LLM_TEMPERATURE=0.2
+ASSISTANT_LLM_MAX_TOKENS=256
+```
+
+`ASSISTANT_LLM_MAX_TOKENS=256` keeps local summaries concise on developer hardware. If unset, the backend runtime default is `2048`.
+
+Install and run Ollama:
+
+1. On macOS, install Ollama natively: https://docs.ollama.com/quickstart
+2. Pull a model:
+
+   ```bash
+   make ollama-pull-fast     # llama3.1:8b, faster local default
+   make ollama-pull-dev      # gemma4:e4b, prompt-contract iteration
+   make ollama-pull-quality  # gemma4:26b, quality checks
+   ```
+
+3. Start Ollama in a separate terminal:
+
+   ```bash
+   make ollama-serve
+   ```
+
+   This runs `ollama serve` with `OLLAMA_KEEP_ALIVE=-1`, so models stay loaded while the server is running.
+
+4. Restart the backend:
+
+   ```bash
+   make backend-run
+   ```
+
+Supported local model choices:
+
+- `llama3.1:8b`: faster local summaries on typical developer hardware
+- `gemma4:e4b`: fast prompt-contract iteration
+- `gemma4:26b`: preferred quality checks
+- `gemma4:31b`: only for hardware that can support it
+
+`ASSISTANT_OLLAMA_BASE_URL=http://localhost:11434` is accepted and normalized internally to Ollama's OpenAI-compatible `/v1` endpoint. Values that already include `/v1` also work.
+
+On macOS, native Ollama is recommended. Docker Desktop on macOS does not support Ollama GPU acceleration, so Docker-based Ollama is useful only for CPU-only portability testing.
+
+### LivAI setup
 
 ```env
 ASSISTANT_LLM_ENABLED=true
 ASSISTANT_LLM_PROVIDER=livai
 ASSISTANT_LIVAI_API_KEY=
-ASSISTANT_LIVAI_MODEL=
+ASSISTANT_LIVAI_MODEL=gpt-5.4
 ASSISTANT_LIVAI_BASE_URL=https://livai-api.llnl.gov/
 ASSISTANT_LLM_TEMPERATURE=0.2
-ASSISTANT_LLM_MAX_TOKENS=2048
+ASSISTANT_LLM_MAX_TOKENS=8192
+ASSISTANT_SNAPSHOT_MAX_CHARS=12000
 ```
 
-Direct OpenAI setup:
+For LivAI, `ASSISTANT_LIVAI_API_KEY`, `ASSISTANT_LIVAI_MODEL`, and `ASSISTANT_LIVAI_BASE_URL` are required.
 
-```env
-ASSISTANT_LLM_ENABLED=true
-ASSISTANT_LLM_PROVIDER=openai
-ASSISTANT_OPENAI_API_KEY=
-ASSISTANT_OPENAI_MODEL=
-ASSISTANT_LLM_TEMPERATURE=0.2
-ASSISTANT_LLM_MAX_TOKENS=2048
+**Model selection:**
+
+- **Recommended:** `gpt-5.4` (full model) — reliable structured output completion, handles 8K+ token responses
+- **Avoid:** `gpt-5.4-mini` — may truncate structured responses before completing all required fields (`limitations`, `citations`, `suggested_followups`)
+
+**Token budget guidance:**
+
+- `ASSISTANT_LLM_MAX_TOKENS`: 4096-8192 for `gpt-5.4`; 2048 for mini models (if used despite limitations)
+- `ASSISTANT_SNAPSHOT_MAX_CHARS`: 12000-16000 balances detail vs token budget; reduce to 8000-10000 for mini models
+
+For current LivAI OpenAI-compatible chat endpoints, SimBoard omits `ASSISTANT_LLM_TEMPERATURE` for `gpt-5*` models because the endpoint rejects that parameter. `ASSISTANT_LLM_MAX_TOKENS` still applies.
+
+### Fallback troubleshooting
+
+After changing `.envs/local/backend.env`, restart the backend before testing again:
+
+```bash
+make backend-run
 ```
 
-If `ASSISTANT_LLM_ENABLED=false`, or the selected provider is misconfigured, the backend automatically returns the deterministic metadata summary instead of an LLM-generated one.
+Common fallback reasons:
 
-For LivAI, `ASSISTANT_LIVAI_API_KEY` and `ASSISTANT_LIVAI_BASE_URL` are the canonical names.
-For the current LivAI OpenAI-compatible chat endpoint, SimBoard omits `ASSISTANT_LLM_TEMPERATURE` for `gpt-5*` models because the endpoint rejects that parameter; `ASSISTANT_LLM_MAX_TOKENS` still applies.
+- `fallback_reason=ollama_misconfigured`: missing `ASSISTANT_OLLAMA_MODEL` or `ASSISTANT_OLLAMA_BASE_URL`
+- `fallback_reason=livai_misconfigured`: missing `ASSISTANT_LIVAI_API_KEY`, `ASSISTANT_LIVAI_MODEL`, or `ASSISTANT_LIVAI_BASE_URL`
 
-If summary generation still falls back:
-
-- `fallback_reason=openai_misconfigured` means the backend is still configured for `openai`, but `ASSISTANT_OPENAI_API_KEY` or `ASSISTANT_OPENAI_MODEL` is missing.
-- `fallback_reason=anthropic_misconfigured` means `ASSISTANT_ANTHROPIC_API_KEY` or `ASSISTANT_ANTHROPIC_MODEL` is missing.
-- `fallback_reason=livai_misconfigured` means `ASSISTANT_LIVAI_API_KEY`, `ASSISTANT_LIVAI_MODEL`, or `ASSISTANT_LIVAI_BASE_URL` is missing.
-- If you edit `.envs/local/backend.env`, restart `make backend-run` before testing again.
+For Ollama, `ASSISTANT_OLLAMA_API_KEY` is optional for local runs and can stay blank unless an auth proxy requires it.
 
 ## Architecture
 
@@ -197,10 +246,10 @@ After ingestion completes, the backend stores normalized cases, simulations, mac
 >
 > Referenced case directories under source archive locations are periodically cleaned up by scheduled site-side jobs outside of SimBoard to limit storage growth.
 
-| Site                 | Ingestion mode            | Source archive location                                                |
-| -------------------- | ------------------------- | ---------------------------------------------------------------------- |
-| NERSC / Perlmutter   | Path reference            | `/global/cfs/projectdirs/e3sm/performance_archive`                     |
-| LCRC / Chrysalis     | Archive upload            | `/lcrc/group/e3sm/PERF_Chrysalis/performance_archive`                  |
+| Site                 | Ingestion mode            | Source archive location                                                 |
+| -------------------- | ------------------------- | ----------------------------------------------------------------------- |
+| NERSC / Perlmutter   | Path reference            | `/global/cfs/projectdirs/e3sm/performance_archive`                      |
+| LCRC / Chrysalis     | Archive upload            | `/lcrc/group/e3sm/PERF_Chrysalis/performance_archive`                   |
 | Additional HPC sites | Archive upload by default | Site-specific `performance_archive` path, packaged by the ingestion job |
 
 ## Daily Workflow

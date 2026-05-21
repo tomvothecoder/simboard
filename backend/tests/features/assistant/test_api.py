@@ -126,6 +126,7 @@ class TestSummarizeSimulationEndpoint:
         ]
         assert isinstance(data["suggestedFollowups"], list)
         assert UUID(data["traceId"])
+        assert data["fallbackUsed"] is False
         assert {citation["path"] for citation in data["citations"]} >= {
             "simulation.execution_id",
             "case.name",
@@ -243,15 +244,145 @@ class TestSummarizeSimulationUnit:
             lambda message, *args: logged.append((message, args)),
         )
 
-        response = await assistant_api.summarize_simulation(sim_id, db=db, user=user)  # type: ignore[arg-type]
+        response = await assistant_api.summarize_simulation(sim_id, db=db, user=user)
 
         assert response.answer == "Deterministic assistant summary."
+        assert response.fallback_used is False
         assert response.trace_id == trace_id
         assert logged
         assert "success=true" in logged[0][0]
+        assert "llm_success=%s" in logged[0][0]
+        assert "fallback_used=%s" in logged[0][0]
         assert logged[0][1][0] == trace_id
         assert logged[0][1][1] == sim_id
         assert logged[0][1][2] == user.id
+        assert logged[0][1][3] == "false"
+        assert logged[0][1][4] == "false"
+
+    @pytest.mark.asyncio
+    async def test_summarize_simulation_logs_true_fallback_when_llm_attempt_fails(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        sim_id = uuid4()
+        trace_id = uuid4()
+        user = User(
+            id=uuid4(),
+            email="user@example.com",
+            is_active=True,
+            is_verified=True,
+            role=UserRole.USER,
+        )
+        db = _FakeAsyncSession(type("SimulationStub", (), {"id": sim_id})())
+        summary = SimulationSummaryResponse(
+            answer="Deterministic fallback summary.",
+            citations=[],
+            assumptions=[],
+            caveats=[],
+            limitations=["limit"],
+            suggested_followups=["follow up"],
+            generation_mode="deterministic",
+            generation_provider=None,
+            generation_model=None,
+            trace_id=uuid4(),
+        )
+        logged: list[tuple[str, tuple[object, ...]]] = []
+
+        async def fake_generate(simulation):
+            assert simulation.id == sim_id
+            return type(
+                "GenerationResult",
+                (),
+                {
+                    "summary": summary,
+                    "fallback_reason": "ModelHTTPError",
+                    "llm_latency_ms": 12.5,
+                    "attempted_provider": "ollama",
+                    "attempted_model": "gemma4:3b",
+                },
+            )()
+
+        monkeypatch.setattr(assistant_api, "generate_simulation_summary", fake_generate)
+        monkeypatch.setattr(assistant_api, "uuid4", lambda: trace_id)
+        monkeypatch.setattr(
+            assistant_api.logger,
+            "info",
+            lambda message, *args: logged.append((message, args)),
+        )
+
+        response = await assistant_api.summarize_simulation(sim_id, db=db, user=user)
+
+        assert response.answer == "Deterministic fallback summary."
+        assert response.fallback_used is True
+        assert response.trace_id == trace_id
+        assert logged
+        assert "success=true" in logged[0][0]
+        assert "llm_success=%s" in logged[0][0]
+        assert "fallback_used=%s" in logged[0][0]
+        assert logged[0][1][3] == "false"
+        assert logged[0][1][4] == "true"
+
+    @pytest.mark.asyncio
+    async def test_summarize_simulation_returns_ollama_generation_metadata(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        sim_id = uuid4()
+        trace_id = uuid4()
+        user = User(
+            id=uuid4(),
+            email="user@example.com",
+            is_active=True,
+            is_verified=True,
+            role=UserRole.USER,
+        )
+        db = _FakeAsyncSession(type("SimulationStub", (), {"id": sim_id})())
+        summary = SimulationSummaryResponse(
+            answer="LLM assistant summary.",
+            citations=[],
+            assumptions=[],
+            caveats=[],
+            limitations=["limit"],
+            suggested_followups=["follow up"],
+            generation_mode="llm",
+            generation_provider="ollama",
+            generation_model="gemma4:26b",
+            trace_id=uuid4(),
+        )
+        logged: list[tuple[str, tuple[object, ...]]] = []
+
+        async def fake_generate(simulation):
+            assert simulation.id == sim_id
+            return type(
+                "GenerationResult",
+                (),
+                {
+                    "summary": summary,
+                    "fallback_reason": None,
+                    "llm_latency_ms": 9.0,
+                    "attempted_provider": "ollama",
+                    "attempted_model": "gemma4:26b",
+                },
+            )()
+
+        monkeypatch.setattr(assistant_api, "generate_simulation_summary", fake_generate)
+        monkeypatch.setattr(assistant_api, "uuid4", lambda: trace_id)
+        monkeypatch.setattr(
+            assistant_api.logger,
+            "info",
+            lambda message, *args: logged.append((message, args)),
+        )
+
+        response = await assistant_api.summarize_simulation(sim_id, db=db, user=user)
+
+        assert response.generation_mode == "llm"
+        assert response.fallback_used is False
+        assert response.generation_provider == "ollama"
+        assert response.generation_model == "gemma4:26b"
+        assert response.trace_id == trace_id
+        assert logged
+        assert "llm_success=%s" in logged[0][0]
+        assert "fallback_used=%s" in logged[0][0]
+        assert logged[0][1][3] == "true"
+        assert logged[0][1][4] == "false"
 
     @pytest.mark.asyncio
     async def test_summarize_simulation_raises_404_for_missing_simulation(
@@ -277,11 +408,13 @@ class TestSummarizeSimulationUnit:
         )
 
         with pytest.raises(assistant_api.HTTPException) as exc_info:
-            await assistant_api.summarize_simulation(sim_id, db=db, user=user)  # type: ignore[arg-type]
+            await assistant_api.summarize_simulation(sim_id, db=db, user=user)
 
         assert exc_info.value.status_code == 404
         assert exc_info.value.detail == "Simulation not found"
         assert logged
         assert "status=not_found" in logged[0][0]
+        assert "llm_success=false" in logged[0][0]
+        assert "fallback_used=false" in logged[0][0]
         assert logged[0][1][0] == trace_id
         assert logged[0][1][1] == sim_id
