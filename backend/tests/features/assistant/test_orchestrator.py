@@ -127,6 +127,24 @@ class TestResolveLLMConfig:
         assert config.api_key.get_secret_value() == "livai-key"
         assert config.base_url == "https://api.livai.llnl.gov/v1"
 
+    @pytest.mark.parametrize(
+        "api_key",
+        [
+            None,
+            SecretStr(""),
+            SecretStr("   "),
+        ],
+    )
+    def test_resolve_llm_config_rejects_blank_livai_api_key(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        api_key: SecretStr | None,
+    ) -> None:
+        _set_livai_settings(monkeypatch, api_key=api_key)
+
+        with pytest.raises(ValueError, match="livai_misconfigured"):
+            orchestrator._resolve_llm_config()
+
     @pytest.mark.parametrize("model_name", ["gemma4:e4b", "gemma4:26b"])
     def test_resolve_llm_config_for_ollama_uses_configured_model_and_base_url(
         self, monkeypatch: pytest.MonkeyPatch, model_name: str

@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from time import perf_counter
 
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 from pydantic_ai.exceptions import (
     ModelAPIError,
     ModelHTTPError,
@@ -193,11 +193,15 @@ def _configured_model_name(provider: SummaryGenerationProvider) -> str | None:
     return settings.assistant_ollama_model
 
 
+def _secret_has_value(secret: SecretStr | None) -> bool:
+    return secret is not None and bool(secret.get_secret_value().strip())
+
+
 def _resolve_llm_config() -> AssistantLLMConfig:
     provider = settings.assistant_llm_provider
     if provider == "livai":
         if (
-            settings.assistant_livai_api_key is None
+            not _secret_has_value(settings.assistant_livai_api_key)
             or not settings.assistant_livai_model
             or not settings.assistant_livai_base_url
         ):
