@@ -126,8 +126,17 @@ Configuration surface (via env vars):
 - `SIMBOARD_API_TOKEN` (`--api-token`)
 - `PERF_ARCHIVE_ROOT` (`--archive-root`, default `/performance_archive`)
 - `MACHINE_NAME` (`--machine-name`, default `perlmutter`)
-- `STATE_PATH` (`--state-path`)
 - `DRY_RUN` (`--dry-run`)
 - `MAX_CASES_PER_RUN` (`--max-cases-per-run`)
 - `MAX_ATTEMPTS` (`--max-attempts`)
 - `REQUEST_TIMEOUT_SECONDS` (`--request-timeout-seconds`)
+
+For one-time cutover from legacy file-backed state, backfill an old
+`state.json` into DB-backed ingestion state before switching the runner:
+
+```bash
+uv run python -m app.scripts.ingestion.verify_legacy_state \
+  --machine-name perlmutter \
+  --state-path /path/to/state.json \
+  --backfill
+```
