@@ -325,6 +325,68 @@ class TestGetIngestionStateEndpoint:
             "processed_execution_ids"
         ] == ["legacy-100.1-1"]
 
+    def test_endpoint_handles_many_legacy_ingestions_without_persisted_state(
+        self, client, db: Session, normal_user_sync
+    ) -> None:
+        machine = self._create_machine(db, "perlmutter")
+        user_id = normal_user_sync["id"]
+
+        legacy_case_count = 200
+
+        for index in range(legacy_case_count):
+            case = Case(name=f"legacy_state_case_{index}")
+            db.add(case)
+            db.flush()
+
+            ingestion = Ingestion(
+                source_type=IngestionSourceType.HPC_PATH,
+                source_reference=f"/archive/legacy_case_{index}",
+                machine_id=machine.id,
+                triggered_by=user_id,
+                status=IngestionStatus.SUCCESS,
+                created_count=1,
+                duplicate_count=0,
+                error_count=0,
+                processed_execution_ids=None,
+            )
+            db.add(ingestion)
+            db.flush()
+
+            db.add(
+                Simulation(
+                    case_id=case.id,
+                    execution_id=f"legacy-{index}.1-1",
+                    compset="FHIST",
+                    compset_alias="fhist",
+                    grid_name="grid",
+                    grid_resolution="1x1",
+                    simulation_type="production",
+                    status="completed",
+                    initialization_type="branch",
+                    machine_id=machine.id,
+                    simulation_start_date=datetime.now(timezone.utc),
+                    created_by=user_id,
+                    last_updated_by=user_id,
+                    ingestion_id=ingestion.id,
+                )
+            )
+
+        db.commit()
+
+        res = client.get(
+            f"{API_BASE}/ingestions/state", params={"machine_name": "perlmutter"}
+        )
+
+        assert res.status_code == 200
+        data = res.json()["cases"]
+        assert len(data) == legacy_case_count
+        assert data["/archive/legacy_case_0"]["processed_execution_ids"] == [
+            "legacy-0.1-1"
+        ]
+        assert data["/archive/legacy_case_199"]["processed_execution_ids"] == [
+            "legacy-199.1-1"
+        ]
+
     def test_endpoint_returns_404_when_machine_missing(self, client) -> None:
         res = client.get(
             f"{API_BASE}/ingestions/state",

@@ -8,6 +8,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import ValidationError
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.common.dependencies import get_database_session
@@ -273,9 +274,9 @@ def _build_ingestion_state_response(
         .order_by(Ingestion.source_reference.asc(), Ingestion.created_at.asc())
         .all()
     )
-    fallback_ingestion_ids: list[UUID] = []
+    requires_legacy_fallback = False
 
-    for ingestion_id, case_path, processed_execution_ids in ingestion_rows:
+    for _ingestion_id, case_path, processed_execution_ids in ingestion_rows:
         if not case_path:
             continue
 
@@ -283,16 +284,23 @@ def _build_ingestion_state_response(
             processed_execution_ids
         )
         if normalized_execution_ids is None:
-            fallback_ingestion_ids.append(ingestion_id)
+            requires_legacy_fallback = True
             continue
 
         execution_ids_by_case[case_path].update(normalized_execution_ids)
 
-    if fallback_ingestion_ids:
+    if requires_legacy_fallback:
         simulation_rows = (
             db.query(Ingestion.source_reference, Simulation.execution_id)
             .join(Simulation, Simulation.ingestion_id == Ingestion.id)
-            .filter(Ingestion.id.in_(fallback_ingestion_ids))
+            .filter(
+                Ingestion.source_type == IngestionSourceType.HPC_PATH,
+                Ingestion.machine_id == machine_id,
+                or_(
+                    Ingestion.processed_execution_ids.is_(None),
+                    func.jsonb_typeof(Ingestion.processed_execution_ids) == "null",
+                ),
+            )
             .order_by(Ingestion.source_reference.asc(), Simulation.execution_id.asc())
             .all()
         )
