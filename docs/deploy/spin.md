@@ -317,12 +317,7 @@ Key table for step 3 (`simboard-ingestion-env`):
    - Confirm logs include `scan_completed` and candidate discovery.
    - Remove `DRY_RUN` (or set `DRY_RUN=false`) after validation.
 
-6. **Optional legacy-state cutover check**
-   - If you are replacing an older file-backed deployment, run:
-     `uv run python -m app.scripts.ingestion.verify_legacy_state --machine-name perlmutter --state-path /path/to/state.json --backfill`
-   - Confirm the script reports `matches: true` before deleting the legacy state file.
-
-7. **Verify steady-state behavior**
+6. **Verify steady-state behavior**
    - Confirm the CronJob runs every 15 minutes.
    - Confirm unchanged cases are not re-ingested.
    - Confirm failures appear as failed CronJob runs and `case_ingestion_failed` log events.
