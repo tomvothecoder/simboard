@@ -207,6 +207,13 @@ For automated archive uploads from remote HPC sites, post multipart form data to
 stable `case_path` and repeated `processed_execution_ids` fields. Keep
 `/ingestions/from-upload` for browser/manual uploads only.
 
+Before calling `/ingestions/from-hpc-upload`, the client must determine the full
+discovered execution ID set for that case and send it as repeated
+`processed_execution_ids` form fields. SimBoard's provided upload tooling derives
+that set during its pre-upload scan step using the existing parser logic. Custom
+clients may use `main_parser` or equivalent logic that produces the same
+per-case execution IDs; `main_parser` is not a protocol requirement.
+
 ### Bash Script Example
 
 ```bash
@@ -236,7 +243,8 @@ curl -X POST "${API_BASE}/ingestions/from-hpc-upload" \
   -F "file=@case-a.tar.gz" \
   -F "machine_name=${MACHINE}" \
   -F "case_path=/remote/performance_archive/case_a" \
-  -F "processed_execution_ids=100.1-1"
+  -F "processed_execution_ids=100.1-1" \
+  -F "processed_execution_ids=101.1-1"
 ```
 
 ## Database Schema
