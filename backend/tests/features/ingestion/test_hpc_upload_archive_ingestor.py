@@ -1,9 +1,14 @@
 """Tests for automated HPC upload archive ingestor runner."""
 
 import json
+import runpy
 import tarfile
+import urllib.error
 import urllib.request
+from email.message import Message
 from pathlib import Path
+
+import pytest
 
 from app.scripts.ingestion import hpc_upload_archive_ingestor as upload_ingestor_module
 from app.scripts.ingestion.hpc_upload_archive_ingestor import (
@@ -31,6 +36,15 @@ class _FakeHttpResponse:
 
     def __exit__(self, exc_type, exc, tb) -> None:
         return None
+
+
+class _FakeHttpError(urllib.error.HTTPError):
+    def __init__(self, url: str, code: int, msg: str, body: bytes) -> None:
+        super().__init__(url, code, msg, hdrs=Message(), fp=None)
+        self._body = body
+
+    def read(self, amt: int = -1) -> bytes:
+        return self._body if amt == -1 else self._body[:amt]
 
 
 def test_build_endpoint_url() -> None:
@@ -64,6 +78,14 @@ def test_create_case_archive_packages_single_case_dir(tmp_path: Path) -> None:
     assert archive_path.name.endswith(".tar.gz")
     assert members
     assert all(member == "case_a" or member.startswith("case_a/") for member in members)
+
+
+def test_create_case_archive_rejects_non_directory(tmp_path: Path) -> None:
+    not_a_directory = tmp_path / "not-a-directory"
+    not_a_directory.write_text("payload")
+
+    with pytest.raises(IngestionRequestError, match="Case path is not a directory"):
+        _create_case_archive(str(not_a_directory), tmp_path)
 
 
 def test_post_hpc_upload_ingestion_request_sends_case_path_and_processed_execution_ids(
@@ -105,6 +127,90 @@ def test_post_hpc_upload_ingestion_request_sends_case_path_and_processed_executi
     assert b'name="processed_execution_ids[]"' in request_body
     assert b"100.1-1" in request_body
     assert b"101.1-1" in request_body
+
+
+def test_post_hpc_upload_ingestion_request_handles_http_error(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    case_dir = tmp_path / "case_a"
+    (case_dir / "100.1-1").mkdir(parents=True)
+    request = urllib.request.Request("http://example.com")
+    error = _FakeHttpError(
+        request.full_url,
+        503,
+        "Service Unavailable",
+        b"retry later",
+    )
+
+    monkeypatch.setattr(
+        upload_ingestor_module.urllib.request,
+        "urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(error),
+    )
+
+    with pytest.raises(IngestionRequestError) as exc_info:
+        _post_hpc_upload_ingestion_request(
+            "http://backend:8000/api/v1/ingestions/from-hpc-upload",
+            "token",
+            str(case_dir),
+            "pm",
+            processed_execution_ids=["100.1-1"],
+            timeout_seconds=12,
+        )
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.transient is True
+
+
+def test_post_hpc_upload_ingestion_request_handles_url_error(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    case_dir = tmp_path / "case_a"
+    (case_dir / "100.1-1").mkdir(parents=True)
+
+    monkeypatch.setattr(
+        upload_ingestor_module.urllib.request,
+        "urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            urllib.error.URLError("network down")
+        ),
+    )
+
+    with pytest.raises(IngestionRequestError, match="URL error: network down"):
+        _post_hpc_upload_ingestion_request(
+            "http://backend:8000/api/v1/ingestions/from-hpc-upload",
+            "token",
+            str(case_dir),
+            "pm",
+            processed_execution_ids=["100.1-1"],
+            timeout_seconds=12,
+        )
+
+
+def test_post_hpc_upload_ingestion_request_handles_timeout(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    case_dir = tmp_path / "case_a"
+    (case_dir / "100.1-1").mkdir(parents=True)
+
+    monkeypatch.setattr(
+        upload_ingestor_module.urllib.request,
+        "urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(TimeoutError()),
+    )
+
+    with pytest.raises(IngestionRequestError, match="Request timed out"):
+        _post_hpc_upload_ingestion_request(
+            "http://backend:8000/api/v1/ingestions/from-hpc-upload",
+            "token",
+            str(case_dir),
+            "pm",
+            processed_execution_ids=["100.1-1"],
+            timeout_seconds=12,
+        )
 
 
 def test_run_ingestor_uploads_once_then_second_run_is_noop(
@@ -227,6 +333,101 @@ def test_run_ingestor_dry_run_does_not_upload(
     assert post_calls == 0
 
 
+def test_run_ingestor_missing_archive_root_returns_failure(
+    monkeypatch, tmp_path: Path
+) -> None:
+    missing_archive_root = tmp_path / "missing-archive"
+    logged_events: list[tuple[str, dict[str, object]]] = []
+
+    def fake_log_event(event: str, fields: dict[str, object] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(upload_ingestor_module, "_log_event", fake_log_event)
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=missing_archive_root,
+        machine_name="perlmutter",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    exit_code = _run_ingestor(config, metadata_locator=lambda *_: {})
+
+    assert exit_code == 1
+    assert any(event == "archive_root_missing" for event, _ in logged_events)
+
+
+def test_run_ingestor_without_token_returns_config_error(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    archive_root = tmp_path / "archive"
+    archive_root.mkdir()
+    logged_events: list[tuple[str, dict[str, object]]] = []
+
+    def fake_log_event(event: str, fields: dict[str, object] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(upload_ingestor_module, "_log_event", fake_log_event)
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    exit_code = _run_ingestor(config, metadata_locator=lambda *_: {})
+
+    assert exit_code == 1
+    assert any(event == "configuration_error" for event, _ in logged_events)
+
+
+def test_run_ingestor_returns_failure_when_state_fetch_fails(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    archive_root = tmp_path / "archive"
+    archive_root.mkdir()
+    logged_events: list[tuple[str, dict[str, object]]] = []
+
+    def fake_log_event(event: str, fields: dict[str, object] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(upload_ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            IngestionRequestError("boom", status_code=503, transient=True)
+        ),
+    )
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    exit_code = _run_ingestor(config, metadata_locator=lambda *_: {})
+
+    assert exit_code == 1
+    assert any(event == "state_fetch_failed" for event, _ in logged_events)
+
+
 def test_run_ingestor_retries_transient_upload_errors(
     tmp_path: Path,
     monkeypatch,
@@ -279,3 +480,71 @@ def test_run_ingestor_retries_transient_upload_errors(
     assert exit_code == 0
     assert len(attempts) == 2
     assert sleep_calls == [1]
+
+
+def test_main_returns_configuration_error_when_config_build_fails(monkeypatch) -> None:
+    logged_events: list[tuple[str, dict[str, object]]] = []
+
+    def fake_log_event(event: str, fields: dict[str, object] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_build_config_from_env",
+        lambda: (_ for _ in ()).throw(ValueError("bad config")),
+    )
+    monkeypatch.setattr(upload_ingestor_module, "_log_event", fake_log_event)
+
+    exit_code = upload_ingestor_module.main()
+
+    assert exit_code == 1
+    assert logged_events == [("configuration_error", {"error": "bad config"})]
+
+
+def test_main_logs_run_started_and_finished(monkeypatch, tmp_path: Path) -> None:
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=tmp_path,
+        machine_name="perlmutter",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+    logged_events: list[tuple[str, dict[str, object]]] = []
+
+    def fake_log_event(event: str, fields: dict[str, object] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(
+        upload_ingestor_module, "_build_config_from_env", lambda: config
+    )
+    monkeypatch.setattr(upload_ingestor_module, "_run_ingestor", lambda cfg: 0)
+    monkeypatch.setattr(upload_ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(
+        upload_ingestor_module.time,
+        "monotonic",
+        lambda: 10.0 if not logged_events else 12.5,
+    )
+
+    exit_code = upload_ingestor_module.main()
+
+    assert exit_code == 0
+    assert logged_events[0][0] == "run_started"
+    assert logged_events[-1][0] == "run_finished"
+
+
+def test_module_main_guard_exits_via_system_exit_on_configuration_error(
+    monkeypatch,
+) -> None:
+    script_path = (
+        Path(__file__).resolve().parents[3]
+        / "app/scripts/ingestion/hpc_upload_archive_ingestor.py"
+    )
+    monkeypatch.setenv("MAX_ATTEMPTS", "0")
+
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_path(str(script_path), run_name="__main__")
+
+    assert exc_info.value.code == 1

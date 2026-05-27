@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.api.version import API_BASE
 from app.features.ingestion.api import (
+    _build_hpc_upload_payload,
     _build_ingestion_state_response,
     _normalize_processed_execution_ids,
     _run_ingest_archive,
@@ -24,6 +25,7 @@ from app.features.ingestion.api import (
     _set_reference_simulations,
     _validate_archive_path,
     _validate_upload_file,
+    ingest_from_hpc_upload,
     ingest_from_upload,
 )
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
@@ -2213,6 +2215,109 @@ class TestIngestionApiCoverage:
             result = ingest_from_upload(
                 file=upload_file,
                 machine_name=machine.name,
+                db=db,
+                user=user,
+            )
+
+        assert result is response
+        raw_file.close.assert_called_once_with()
+
+    def test_build_hpc_upload_payload_translates_validation_errors(self):
+        with pytest.raises(HTTPException) as exc_info:
+            _build_hpc_upload_payload(
+                machine_name="perlmutter",
+                case_path="   ",
+                hpc_username=None,
+                processed_execution_ids=None,
+                processed_execution_ids_bracket=None,
+            )
+
+        assert exc_info.value.status_code == 422
+        assert {error["loc"][-1] for error in exc_info.value.detail} == {
+            "case_path",
+            "processed_execution_ids",
+        }
+
+    def test_ingest_from_hpc_upload_defensive_filename_none_branch(
+        self, db: Session, normal_user_sync: dict
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        user = User(
+            id=normal_user_sync["id"],
+            email=normal_user_sync["email"],
+            is_active=True,
+            is_verified=True,
+            role=UserRole.ADMIN,
+        )
+        upload_file = UploadFile(file=BytesIO(b"archive-bytes"), filename=None)
+
+        with patch(
+            "app.features.ingestion.api._validate_upload_file", return_value=None
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                ingest_from_hpc_upload(
+                    file=upload_file,
+                    machine_name=machine.name,
+                    case_path="/archive/case_a",
+                    hpc_username=None,
+                    processed_execution_ids=["100.1-1"],
+                    processed_execution_ids_bracket=None,
+                    db=db,
+                    user=user,
+                )
+
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.detail == "Filename is required"
+
+    def test_ingest_from_hpc_upload_ignores_file_close_errors(
+        self, db: Session, normal_user_sync: dict
+    ):
+        machine = db.query(Machine).first()
+        assert machine is not None
+
+        user = User(
+            id=normal_user_sync["id"],
+            email=normal_user_sync["email"],
+            is_active=True,
+            is_verified=True,
+            role=UserRole.SERVICE_ACCOUNT,
+        )
+        raw_file = MagicMock()
+        raw_file.close.side_effect = RuntimeError("close failed")
+        upload_file = UploadFile(file=raw_file, filename="archive.tar.gz")
+        response = MagicMock()
+
+        with (
+            patch(
+                "app.features.ingestion.api._validate_upload_file", return_value=None
+            ),
+            patch(
+                "app.features.ingestion.api._save_uploaded_file_and_hash",
+                return_value="deadbeef",
+            ),
+            patch(
+                "app.features.ingestion.api._run_ingest_archive",
+                return_value=IngestArchiveResult(
+                    simulations=[],
+                    created_count=0,
+                    duplicate_count=0,
+                    errors=[],
+                ),
+            ),
+            patch(
+                "app.features.ingestion.api._process_ingestion",
+                return_value=response,
+            ),
+        ):
+            result = ingest_from_hpc_upload(
+                file=upload_file,
+                machine_name=machine.name,
+                case_path="/archive/case_a",
+                hpc_username=None,
+                processed_execution_ids=["100.1-1"],
+                processed_execution_ids_bracket=None,
                 db=db,
                 user=user,
             )
