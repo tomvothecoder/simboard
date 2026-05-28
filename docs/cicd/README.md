@@ -1,32 +1,73 @@
-# CI/CD Automation for NERSC Container Builds
+# CI/CD Container Builds
 
 Audience: maintainers operating CI/CD and release image builds.
 
-Automated multi-arch container builds to NERSC Registry with dev/prod separation.
+SimBoard uses GitHub Actions to build and publish frontend and backend container images to the NERSC container registry.
 
----
+## Registry
 
-## 🚀 Quick Start
+```text
+registry.nersc.gov/e3sm/simboard/backend
+registry.nersc.gov/e3sm/simboard/frontend
+```
 
-> Note: A NERSC E3SM project robot account is provided to SimBoard administrators for automated
-> deployment on NERSC registry.
+A NERSC E3SM project robot account is provided to SimBoard administrators for automated registry access.
 
-### 1. Configure GitHub Secrets (Required)
+## GitHub Secrets
 
-Add these secrets in [repository settings](https://github.com/E3SM-Project/simboard/settings/secrets/actions):
+Configure these secrets in repository Actions settings:
 
-- `NERSC_REGISTRY_USERNAME` - Your NERSC username
-- `NERSC_REGISTRY_PASSWORD` - Your NERSC password or token
+| Secret                    | Purpose                                                  |
+| ------------------------- | -------------------------------------------------------- |
+| `NERSC_REGISTRY_USERNAME` | Username for `docker login registry.nersc.gov`.          |
+| `NERSC_REGISTRY_PASSWORD` | Password or token for `docker login registry.nersc.gov`. |
 
-### 2. Test the Setup
+Test locally:
 
-Trigger a manual build:
+```bash
+docker login registry.nersc.gov
+```
 
-1. Go to [Actions](https://github.com/E3SM-Project/simboard/actions)
-2. Select "Build Backend (Dev)" or "Build Frontend (Dev)"
-3. Click "Run workflow" → Select `main` → Run
+## Workflows
 
-### 3. Verify Images
+Current workflow files and exact trigger filters live under [`../../.github/workflows/`](../../.github/workflows/).
+
+| Workflow               | Trigger                                                  | Image tags                           |
+| ---------------------- | -------------------------------------------------------- | ------------------------------------ |
+| Backend dev build      | Push to `main` with backend changes, or manual dispatch  | `:dev`, `:sha-<commit>`              |
+| Frontend dev build     | Push to `main` with frontend changes, or manual dispatch | `:dev`, `:sha-<commit>`              |
+| Backend release build  | Tag matching `backend-v*`                                | `:X.Y.Z`, `:sha-<commit>`, `:latest` |
+| Frontend release build | Tag matching `frontend-v*`                               | `:X.Y.Z`, `:sha-<commit>`, `:latest` |
+
+## Build Flow
+
+```text
+Dev builds:     push to main or manual dispatch -> :dev, :sha-<short>
+Release builds: component tag                   -> :X.Y.Z, :sha-<short>, :latest
+```
+
+Dev builds do not modify production images. Release builds do not modify the `:dev` image.
+
+## Image Tagging
+
+| Git tag           | Component | Image                                             |
+| ----------------- | --------- | ------------------------------------------------- |
+| `backend-vX.Y.Z`  | Backend   | `registry.nersc.gov/e3sm/simboard/backend:X.Y.Z`  |
+| `frontend-vX.Y.Z` | Frontend  | `registry.nersc.gov/e3sm/simboard/frontend:X.Y.Z` |
+
+Use full semantic versions in production for reproducibility. Use `:sha-<commit>` tags for debugging or precise rollback.
+
+## Manual Build Verification
+
+Trigger a manual dev build:
+
+1. Open [GitHub Actions](https://github.com/E3SM-Project/simboard/actions).
+2. Select the backend or frontend dev build workflow.
+3. Click **Run workflow**.
+4. Select `main`.
+5. Run the workflow.
+
+Verify images:
 
 ```bash
 docker login registry.nersc.gov
@@ -34,142 +75,29 @@ docker pull registry.nersc.gov/e3sm/simboard/backend:dev
 docker pull registry.nersc.gov/e3sm/simboard/frontend:dev
 ```
 
----
+## Troubleshooting
 
-## 📋 Workflows
+### Authentication failure
 
-Current workflow files and exact trigger filters live under [`../../.github/workflows/`](../../.github/workflows/).
+- Verify GitHub Actions secrets are configured.
+- Test the same credentials with `docker login registry.nersc.gov`.
+- Confirm the account has push permissions for the `e3sm/simboard` registry namespace.
 
-| Workflow               | Trigger                           | Image Tags                           |
-| ---------------------- | --------------------------------- | ------------------------------------ |
-| Backend dev build      | Push to `main` (backend changes)  | `:dev`, `:sha-<commit>`              |
-| Frontend dev build     | Push to `main` (frontend changes) | `:dev`, `:sha-<commit>`              |
-| Backend release build  | Tag `backend-v*`                  | `:X.Y.Z`, `:sha-<commit>`, `:latest` |
-| Frontend release build | Tag `frontend-v*`                 | `:X.Y.Z`, `:sha-<commit>`, `:latest` |
+### Workflow not triggering
 
-**Registry:** `registry.nersc.gov/e3sm/simboard/{backend,frontend}`
+- Verify changes match the workflow path filters.
+- Verify tags follow the component conventions: `backend-vX.Y.Z` or `frontend-vX.Y.Z`.
+- Check that GitHub Actions are enabled for the repository.
 
-**Features:**
+### Image built but deployment did not update
 
-- Multi-arch builds (linux/amd64, linux/arm64)
-- Docker Buildx with layer caching
-- Automatic tagging with semantic versioning
-- Manual dispatch support
+CI only builds and publishes images. Deployment updates are handled separately through NERSC Spin.
 
----
+See [Deployment and Release Guide](../deploy/deployment-and-release.md).
 
-## 🏗️ Architecture
+## Related Documentation
 
-```text
-Development:
-  main branch → :dev tag → NERSC Spin dev namespace
-
-Production:
-  GitHub Release (backend-vX.Y.Z) → :X.Y.Z tag → NERSC Spin prod namespace
-  GitHub Release (frontend-vX.Y.Z) → :X.Y.Z tag → NERSC Spin prod namespace
-```
-
-**Dev Environment:**
-
-- Backend: `registry.nersc.gov/e3sm/simboard/backend:dev`
-- Frontend: `registry.nersc.gov/e3sm/simboard/frontend:dev`
-- Updates automatically on push to `main`
-
-**Prod Environment:**
-
-- Backend: `registry.nersc.gov/e3sm/simboard/backend:X.Y.Z`
-- Frontend: `registry.nersc.gov/e3sm/simboard/frontend:X.Y.Z`
-- Independently versioned via component-scoped GitHub Releases
-
----
-
-## 📦 Creating a Release
-
-Frontend and backend are released independently using component-scoped tags.
-
-1. **Prepare:**
-
-   ```bash
-   git checkout main && git pull
-   make backend-test && make frontend-lint
-   ```
-
-2. **Create release on GitHub:**
-   - Go to [Releases](https://github.com/E3SM-Project/simboard/releases/new)
-   - Create tag using component convention:
-     - Frontend: `frontend-vX.Y.Z`
-     - Backend: `backend-vX.Y.Z`
-   - Target: `main`
-   - Write release notes
-   - Publish release
-
-3. **Monitor builds:**
-   - Check [Actions](https://github.com/E3SM-Project/simboard/actions) tab
-   - Only the matching component workflow will trigger
-
-4. **Deploy to NERSC Spin:**
-   - Backend migrations run automatically in the backend initContainer via `/app/migrate.sh` during rollout
-   - Open the [Rancher UI](https://rancher2.spin.nersc.gov/dashboard/home)
-   - Navigate to **Workloads → Deployments** in the prod namespace
-   - Edit the deployment's image tag to the new release version (for example, `X.Y.Z`)
-   - Set **Pull Policy** to `IfNotPresent`
-   - Save to trigger the rollout
-
----
-
-## 🔧 NERSC Spin Deployment
-
-### Development
-
-```yaml
-# Dev deployments use :dev tag with Always pull policy
-image: registry.nersc.gov/e3sm/simboard/backend:dev
-imagePullPolicy: Always
-```
-
-To redeploy with the latest image, use the [Rancher UI](https://rancher2.spin.nersc.gov/dashboard/home):
-**Workloads → Deployments → ⋮ → Redeploy**
-
-### Production
-
-```yaml
-# Prod deployments use explicit versions with IfNotPresent
-image: registry.nersc.gov/e3sm/simboard/backend:X.Y.Z
-imagePullPolicy: IfNotPresent
-```
-
----
-
-## 🐛 Troubleshooting
-
-**Build fails with "authentication required":**
-
-- Verify GitHub Secrets are configured correctly
-- Test: `docker login registry.nersc.gov` locally
-
-**Image not updating in dev:**
-
-- In [Rancher](https://rancher2.spin.nersc.gov/dashboard/home), redeploy the workload: **Workloads → Deployments → ⋮ → Redeploy**
-- Check Pull Policy is `Always` for `:dev` tags
-
-**Workflow not triggering:**
-
-- Verify file changes match workflow paths (e.g., `backend/**`)
-- Check Actions are enabled in repository settings
-
-**For more help:** See [DEPLOYMENT.md](DEPLOYMENT.md) for complete documentation
-
----
-
-## 📚 Documentation
-
-- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Complete reference guide with detailed workflows, Kubernetes examples, and troubleshooting
-
----
-
-## 🔗 Quick Links
-
-- [NERSC Registry](https://registry.nersc.gov/harbor/projects)
-- [NERSC Spin Dashboard](https://rancher2.spin.nersc.gov/)
+- [Deployment and Release Guide](../deploy/deployment-and-release.md)
+- [NERSC Spin Runbook](../deploy/nersc-spin-runbook.md)
 - [GitHub Actions](https://github.com/E3SM-Project/simboard/actions)
-- [Repository Settings](https://github.com/E3SM-Project/simboard/settings)
+- [NERSC Registry](https://registry.nersc.gov/harbor/projects)

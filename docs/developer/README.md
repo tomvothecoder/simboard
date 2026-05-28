@@ -1,8 +1,50 @@
 # Developer Guide
 
-Use this guide for local setup, repo-wide development workflow, and contributor-oriented architecture. For service-specific detail, see [backend/README.md](../../backend/README.md) and [frontend/README.md](../../frontend/README.md).
+Use this guide for local setup, repo-wide development workflow, and contributor-oriented architecture. For service-specific
+detail, see [backend/README.md](../../backend/README.md) and [frontend/README.md](../../frontend/README.md).
 
-## Local Setup
+## System Overview
+
+SimBoard is a web application for cataloging, browsing, comparing, and analyzing E3SM simulation metadata. The frontend, backend, and PostgreSQL database are hosted on NERSC Spin. Automated ingestion jobs running on HPC sites collect E3SM `performance_archive` metadata and submit it to SimBoard.
+
+```mermaid
+flowchart LR
+  user[Browser User]
+  ingest([Automated Ingestion])
+
+  subgraph mono[SimBoard — hosted on NERSC Spin]
+    direction LR
+    fe[Frontend\nReact + Vite SPA]
+    be[Backend\nFastAPI /api/v1]
+    db[(PostgreSQL)]
+  end
+
+  gh[GitHub OAuth]
+  pace[PACE Lookup]
+
+  user --> fe
+  fe -- HTTPS + cookie auth --> be
+  ingest --> be
+  be --> db
+  be --> gh
+  be --> pace
+```
+
+| Component           | Role                                                                                                                                                                         |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Frontend            | Provides browse, detail, compare, authentication, and upload views. Calls the backend over HTTPS through `frontend/src/api/api.ts` with credentials enabled for cookie auth. |
+| Backend             | Parses ingested archives, validates metadata, applies reference-simulation rules, persists normalized records, and exposes `/api/v1` endpoints.                              |
+| PostgreSQL          | Stores cases, simulations, machines, users, tokens, artifacts, links, and ingestion records.                                                                                 |
+| Automated ingestion | Runs on supported HPC sites, scans E3SM `performance_archive` locations, and submits changed metadata to SimBoard.                                                           |
+| External services   | GitHub OAuth for login and PACE for performance lookup.                                                                                                                      |
+
+## Metadata Ingestion
+
+SimBoard supports local path ingestion from NERSC / Perlmutter and remote automated uploads from other DOE sites. Automated runners use database-backed dedupe state and submit changed `performance_archive` cases through ingestion API routes.
+
+See [Metadata Ingestion Architecture](../architecture/metadata-ingestion.md) for ingestion modes, dedupe flow, runner configuration, site mapping, and PACE reference scripts.
+
+## Local Environment Setup
 
 Prerequisites:
 
@@ -42,7 +84,9 @@ pnpm --dir frontend run type-check  # TypeScript type checking (no Makefile wrap
 make help                  # list all available Makefile targets
 ```
 
-## GitHub Auth Setup
+## Optional Local Services
+
+### GitHub Auth Setup
 
 If you need authenticated browser flows such as upload:
 
@@ -57,214 +101,15 @@ If you need admin-only local flows such as service-account or token provisioning
 make backend-create-admin
 ```
 
-For token-based ingestion and service-account details, see [docs/hpc_api_token_authentication.md](../hpc_api_token_authentication.md).
+For token-based ingestion and service-account details, see [docs/hpc_api_token_authentication.md](../deploy/hpc-api-token-authentication.md).
 
-## Assistant LLM Env Setup
+### Assistant LLM Setup
 
-Configure `.envs/local/backend.env` to enable LLM-backed summaries on the simulation details page. If LLM support is disabled or misconfigured, the backend falls back to the deterministic metadata summary.
+SimBoard can generate LLM-backed summaries on the simulation details page. If LLM support is disabled or misconfigured, the backend falls back to the deterministic metadata summary.
 
-### Required settings
+See [Assistant LLM Setup](assistant-llm-setup.md) for Ollama and LivAI configuration, model choices, token-budget guidance, and fallback troubleshooting.
 
-```env
-ASSISTANT_LLM_ENABLED=true
-ASSISTANT_LLM_PROVIDER=ollama  # ollama or livai
-```
-
-Use exactly one provider and configure only that provider's env vars.
-
-### Local Ollama setup
-
-Recommended local default:
-
-```env
-ASSISTANT_LLM_ENABLED=true
-ASSISTANT_LLM_PROVIDER=ollama
-ASSISTANT_OLLAMA_BASE_URL=http://localhost:11434
-ASSISTANT_OLLAMA_MODEL=llama3.1:8b
-ASSISTANT_OLLAMA_API_KEY=
-ASSISTANT_LLM_TEMPERATURE=0.2
-ASSISTANT_LLM_MAX_TOKENS=256
-```
-
-`ASSISTANT_LLM_MAX_TOKENS=256` keeps local summaries concise on developer hardware. If unset, the backend runtime default is `2048`.
-
-Install and run Ollama:
-
-1. On macOS, install Ollama natively: https://docs.ollama.com/quickstart
-2. Pull a model:
-
-   ```bash
-   make ollama-pull-fast     # llama3.1:8b, faster local default
-   make ollama-pull-dev      # gemma4:e4b, prompt-contract iteration
-   make ollama-pull-quality  # gemma4:26b, quality checks
-   ```
-
-3. Start Ollama in a separate terminal:
-
-   ```bash
-   make ollama-serve
-   ```
-
-   This runs `ollama serve` with `OLLAMA_KEEP_ALIVE=-1`, so models stay loaded while the server is running.
-
-4. Restart the backend:
-
-   ```bash
-   make backend-run
-   ```
-
-Supported local model choices:
-
-- `llama3.1:8b`: faster local summaries on typical developer hardware
-- `gemma4:e4b`: fast prompt-contract iteration
-- `gemma4:26b`: preferred quality checks
-- `gemma4:31b`: only for hardware that can support it
-
-`ASSISTANT_OLLAMA_BASE_URL=http://localhost:11434` is accepted and normalized internally to Ollama's OpenAI-compatible `/v1` endpoint. Values that already include `/v1` also work.
-
-On macOS, native Ollama is recommended. Docker Desktop on macOS does not support Ollama GPU acceleration, so Docker-based Ollama is useful only for CPU-only portability testing.
-
-### LivAI setup
-
-```env
-ASSISTANT_LLM_ENABLED=true
-ASSISTANT_LLM_PROVIDER=livai
-ASSISTANT_LIVAI_API_KEY=
-ASSISTANT_LIVAI_MODEL=gpt-5.4
-ASSISTANT_LIVAI_BASE_URL=https://livai-api.llnl.gov/
-ASSISTANT_LLM_TEMPERATURE=0.2
-ASSISTANT_LLM_MAX_TOKENS=8192
-ASSISTANT_SNAPSHOT_MAX_CHARS=12000
-```
-
-For LivAI, `ASSISTANT_LIVAI_API_KEY`, `ASSISTANT_LIVAI_MODEL`, and `ASSISTANT_LIVAI_BASE_URL` are required.
-
-**Model selection:**
-
-- **Recommended:** `gpt-5.4` (full model) — reliable structured output completion, handles 8K+ token responses
-- **Avoid:** `gpt-5.4-mini` — may truncate structured responses before completing all required fields (`limitations`, `citations`, `suggested_followups`)
-
-**Token budget guidance:**
-
-- `ASSISTANT_LLM_MAX_TOKENS`: 4096-8192 for `gpt-5.4`; 2048 for mini models (if used despite limitations)
-- `ASSISTANT_SNAPSHOT_MAX_CHARS`: 12000-16000 balances detail vs token budget; reduce to 8000-10000 for mini models
-
-For current LivAI OpenAI-compatible chat endpoints, SimBoard omits `ASSISTANT_LLM_TEMPERATURE` for `gpt-5*` models because the endpoint rejects that parameter. `ASSISTANT_LLM_MAX_TOKENS` still applies.
-
-### Fallback troubleshooting
-
-After changing `.envs/local/backend.env`, restart the backend before testing again:
-
-```bash
-make backend-run
-```
-
-Common fallback reasons:
-
-- `fallback_reason=ollama_misconfigured`: missing `ASSISTANT_OLLAMA_MODEL` or `ASSISTANT_OLLAMA_BASE_URL`
-- `fallback_reason=livai_misconfigured`: missing `ASSISTANT_LIVAI_API_KEY`, `ASSISTANT_LIVAI_MODEL`, or `ASSISTANT_LIVAI_BASE_URL`
-
-For Ollama, `ASSISTANT_OLLAMA_API_KEY` is optional for local runs and can stay blank unless an auth proxy requires it.
-
-## Architecture
-
-SimBoard is a web application for cataloging and comparing E3SM simulation metadata. The full application (frontend, backend, and database) is hosted on NERSC Spin. Automated ingestion jobs running on HPC sites collect metadata from an E3SM performance archive and push it to SimBoard, where the backend normalizes it and the frontend lets researchers browse, compare, and analyze results.
-
-```mermaid
-flowchart LR
-  user[Browser User]
-  ingest([Automated Ingestion])
-
-  subgraph mono[SimBoard — hosted on NERSC Spin]
-    direction LR
-    fe[Frontend\nReact + Vite SPA]
-    be[Backend\nFastAPI /api/v1]
-    db[(PostgreSQL)]
-  end
-
-  gh[GitHub OAuth]
-  pace[PACE Lookup]
-
-  user --> fe
-  fe -- HTTPS + cookie auth --> be
-  ingest --> be
-  be --> db
-  be --> gh
-  be --> pace
-```
-
-- **Frontend** — browse, detail, compare, auth, and upload views. Calls the backend over HTTPS via `frontend/src/api/api.ts` with credentials enabled for cookie auth.
-- **Backend** — parses ingested archives, applies validation and reference-simulation rules, persists normalized records, and exposes `/api/v1` endpoints.
-- **PostgreSQL** — stores cases, simulations, machines, users, tokens, artifacts, links, and ingestion records.
-- **External services** — GitHub OAuth (user login) and PACE (performance lookup).
-
-## Automated HPC Metadata Ingestion
-
-HPC sites automatically produce `performance_archive` metadata. Automated ingestion jobs running on those sites collect the metadata and push it to SimBoard through one of two ingestion modes:
-
-- **Path ingestion** — an ingestion job sends a path reference to SimBoard, and the backend reads the archive directly from a mounted filesystem (used when the site's storage is accessible to NERSC Spin, e.g., NERSC / Perlmutter).
-- **Archive upload** — an ingestion job packages the archive and uploads it to SimBoard over HTTPS (used when the filesystem is not accessible from NERSC Spin, e.g., LCRC / Chrysalis).
-
-For NERSC path ingestion, deduplication state is now database-backed. The ingestor reads known execution IDs from `/api/v1/ingestions/state`, compares them with the current archive scan, and sends the full discovered `processed_execution_ids` set with each changed case. Successful ingestions persist that state on ingestion audit rows so future runs can reconstruct dedupe state directly from PostgreSQL.
-
-```mermaid
-flowchart TD
-  subgraph SOURCES["Source Archives"]
-    NERSC_SRC["NERSC / Perlmutter"]
-    LCRC_SRC["LCRC / Chrysalis"]
-    ADDL_SRC["Additional HPC Sites"]
-  end
-
-  subgraph AUTOMATION["Site-Side Automation"]
-    NERSC_WRAP["Ingestion Job\npushes path reference"]
-    UPLOAD_WRAP["Ingestion Job\npackages and uploads archive"]
-  end
-
-  subgraph BACKEND["SimBoard Backend"]
-    STATE["GET /ingestions/state\nDB-backed known execution IDs"]
-    PATH["Path Ingestion\nvalidate token, parse in place,\npersist processed_execution_ids"]
-    UPLOAD["Archive Upload Ingestion\nvalidate token, stage and parse"]
-    NORMALIZE["Normalize and Validate"]
-    AUDIT["Ingestion Audit Record"]
-    DB[("PostgreSQL")]
-  end
-
-  NERSC_SRC --> NERSC_WRAP
-  NERSC_WRAP -->|"read known state"| STATE
-  NERSC_WRAP -->|"path reference + processed_execution_ids"| PATH
-  LCRC_SRC --> UPLOAD_WRAP
-  ADDL_SRC -.-> UPLOAD_WRAP
-  UPLOAD_WRAP -->|"archive upload"| UPLOAD
-
-  STATE --> DB
-  PATH --> NORMALIZE
-  UPLOAD --> NORMALIZE
-  NORMALIZE --> AUDIT --> DB
-```
-
-All ingestion requests require a bearer API token. Site-side ingestion jobs are configured with machine name, source path, API URL, dry-run flag, and the token. For the NERSC path-ingestion workflow, the job also needs access to the `/api/v1/ingestions/state` endpoint so it can reconstruct dedupe state from PostgreSQL before deciding which cases to submit.
-
-### State Management Notes
-
-- **Current NERSC runner behavior** — the `nersc-archive-ingestor` fetches DB-backed ingestion state from `/api/v1/ingestions/state` before deciding which case paths to submit.
-- **Persisted dedupe state** — path-based ingestion requests include `processed_execution_ids`, and the backend stores them on `Ingestion` rows so partial and duplicate-only runs still contribute to future dedupe decisions.
-- **Fallback for older rows** — if an ingestion predates the new `processed_execution_ids` column, SimBoard reconstructs state from `Simulation.execution_id` for those legacy rows until they are backfilled or superseded by new ingestions.
-
-After ingestion completes, the backend stores normalized cases, simulations, machines, artifacts, links, and audit records in PostgreSQL. The frontend reads the resulting catalog data through `/api/v1` endpoints.
-
-> **Note**
->
-> SimBoard records artifact references, including output directories, source archive locations, run scripts, and batch logs, to support reproducibility.
->
-> Referenced case directories under source archive locations are periodically cleaned up by scheduled site-side jobs outside of SimBoard to limit storage growth.
-
-| Site                 | Ingestion mode            | Source archive location                                                 |
-| -------------------- | ------------------------- | ----------------------------------------------------------------------- |
-| NERSC / Perlmutter   | Path reference            | `/global/cfs/projectdirs/e3sm/performance_archive`                      |
-| LCRC / Chrysalis     | Archive upload            | `/lcrc/group/e3sm/PERF_Chrysalis/performance_archive`                   |
-| Additional HPC sites | Archive upload by default | Site-specific `performance_archive` path, packaged by the ingestion job |
-
-## Daily Workflow
+## Daily Development Workflow
 
 Common tasks beyond the initial setup:
 
@@ -297,7 +142,7 @@ uv run pytest tests/path/to/test_file.py
 uv run pytest tests/path/to/test_file.py::test_function_name
 ```
 
-## Making a Change — Walkthrough
+## Change Walkthrough
 
 ### Backend example: add a new API field
 
@@ -369,7 +214,7 @@ make gen-certs
 Your browser will show a self-signed certificate warning — this is expected for local development.
 
 **`uv` or `pnpm` not found**
-The backend uses `uv` (not pip) and the frontend uses `pnpm` (not npm/yarn). Both must be on your `PATH`. See the [Prerequisites](#local-setup) section for install links.
+The backend uses `uv` (not pip) and the frontend uses `pnpm` (not npm/yarn). Both must be on your `PATH`. See the [Prerequisites](#local-environment-setup) section for install links.
 
 **Pre-commit fails or gives inconsistent results**
 Always run pre-commit from the repository root, not from `backend/` or `frontend/`. Some hooks (e.g., `mypy`) depend on root-relative config paths.
@@ -411,7 +256,7 @@ Key habits for safe changes:
 - add Alembic migrations when schema changes
 - run `make pre-commit-run` from the repository root, not from subdirectories
 
-## Where Important Details Live
+## Related Documentation
 
 - backend service detail: [backend/README.md](../../backend/README.md)
 - frontend service detail: [frontend/README.md](../../frontend/README.md)
