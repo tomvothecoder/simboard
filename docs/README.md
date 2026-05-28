@@ -6,6 +6,7 @@ Use this directory as the documentation router by audience.
 
 - Developer guide: [developer/README.md](developer/README.md)
 - Contribution workflow: [../CONTRIBUTING.md](../CONTRIBUTING.md)
+- Metadata ingestion architecture: [architecture/metadata-ingestion.md](architecture/metadata-ingestion.md)
 
 ## For Backend Developers
 
@@ -17,7 +18,8 @@ Use this directory as the documentation router by audience.
 
 ## For Operations and Deployment
 
+- Metadata ingestion architecture: [architecture/metadata-ingestion.md](architecture/metadata-ingestion.md)
 - CI/CD overview: [cicd/README.md](cicd/README.md)
-- Deployment reference: [cicd/DEPLOYMENT.md](cicd/DEPLOYMENT.md)
-- NERSC Spin runbook: [deploy/spin.md](deploy/spin.md)
-- HPC token and service-account auth: [hpc_api_token_authentication.md](hpc_api_token_authentication.md)
+- Deployment reference: [deploy/deployment-and-release.md](deploy/deployment-and-release.md)
+- NERSC Spin runbook: [deploy/nersc-spin-runbook.md](deploy/nersc-spin-runbook.md)
+- HPC token and service-account auth: [deploy/hpc-api-token-authentication.md](deploy/hpc-api-token-authentication.md)

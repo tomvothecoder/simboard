@@ -1,4 +1,4 @@
-# Deployment Guide
+# Deployment and Release Guide
 
 Audience: maintainers operating deployments and release rollouts.
 

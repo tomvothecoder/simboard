@@ -1,4 +1,4 @@
-# NERSC Spin Workloads (Backend InitContainer Migrations)
+# NERSC Spin Runbook
 
 Audience: operators deploying SimBoard on NERSC Spin.
 
@@ -390,11 +390,11 @@ Key table for step 3 (`simboard-ingestion-env`):
 
 `Storage`:
 
-| Rancher field      | Value                    |
-| ------------------ | ------------------------ |
-| Archive volume     | `performance-archive`    |
-| Archive mount path | `/performance_archive`   |
-| Archive read only  | `true` (recommended)     |
+| Rancher field      | Value                  |
+| ------------------ | ---------------------- |
+| Archive volume     | `performance-archive`  |
+| Archive mount path | `/performance_archive` |
+| Archive read only  | `true` (recommended)   |
 
 Notes:
 
