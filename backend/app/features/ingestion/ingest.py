@@ -4,19 +4,25 @@ Module for ingesting simulation archives and mapping to DB schemas.
 Reference simulation semantics for performance_archive ingestion:
   - A run is "successful" only if all required metadata files are present.
   - case_name (from timing files) is the identity for Case grouping.
-  - The first successful run per case is the reference simulation.
+  - The first successful hashless run per case is the case-wide reference.
   - CASE_HASH is stored as execution metadata for grouping related runs.
+  - Hashed runs compare configuration deltas within their
+    ``(case_id, case_hash)`` subgroup.
   - Each run creates a Simulation linked to a Case via case_id.
-  - Reference simulations have run_config_deltas = None.
-  - Non-reference runs store config differences vs the reference.
+  - Baseline simulations have ``run_config_deltas = None``.
+  - Non-baseline runs store config differences versus the stored baseline.
   - Incomplete runs are skipped at the parser level.
   - Re-processing is idempotent due to execution_id uniqueness.
 
-Caching for reference lookup:
-  - reference_cache: reference metadata for new cases in this ingest batch,
-    keyed by case_name.
-  - persisted_reference_cache: reference metadata for cases already in DB,
-    keyed by case.id, to avoid repeated DB queries.
+Caching for baseline lookup:
+  - reference_cache: case-wide baseline metadata for new hashless cases in this
+    ingest batch, keyed by case_name.
+  - persisted_reference_cache: case-wide baseline metadata for cases already in
+    DB, keyed by case.id, to avoid repeated DB queries.
+  - subgroup_reference_cache: subgroup baseline metadata for new hashed runs in
+    this ingest batch, keyed by ``(case.id, case_hash)``.
+  - persisted_subgroup_reference_cache: subgroup baseline metadata for hashed
+    runs already in DB, keyed by ``(case.id, case_hash)``.
 """
 
 import shlex
@@ -43,6 +49,7 @@ logger = _setup_custom_logger(__name__)
 _STRING_ADAPTER = TypeAdapter(str)
 _DATETIME_ADAPTER = TypeAdapter(datetime)
 _HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
+SubgroupReferenceKey = tuple[UUID, str]
 
 
 @dataclass
@@ -113,24 +120,15 @@ def ingest_archive(
 ) -> IngestArchiveResult:
     """Ingest a simulation archive and return summary counts.
 
-    Implements reference simulation semantics:
+    Implements baseline selection for reference-style config deltas:
 
     - Case lookup/creation is done by ``case_name`` from timing files.
-    - The first successful run per case becomes the reference simulation
-      (``run_config_deltas = None``).
-    - Non-reference simulations store a single dict of configuration
-      differences versus the reference.
+    - Hashless runs keep case-wide reference behavior.
+    - Hashed runs compare against the stored baseline in the same
+      ``(case_id, case_hash)`` subgroup.
+    - Baseline simulations store ``run_config_deltas = None``.
     - Duplicate detection is based on ``execution_id`` uniqueness.
-    - Uses two caches to avoid redundant work:
-       - ``reference_cache``: Tracks the reference simulation metadata for each
-           new case found in the current ingest batch (keyed by case_name). This
-           ensures that if multiple new runs for the same case appear in a
-           single archive, all are compared against the same in-batch reference.
-       - ``persisted_reference_cache``: Tracks reference simulation metadata
-           for cases already in the database (keyed by case.id). This avoids
-           repeated database queries for the reference simulation of a case
-           when processing multiple runs for the same case in a single ingest
-           operation.
+    - Uses caches to avoid repeated baseline lookups within one ingest.
 
     Parameters
     ----------
@@ -174,6 +172,10 @@ def ingest_archive(
     errors: list[dict[str, str]] = []
     reference_cache: dict[str, SimulationConfigSnapshot] = {}
     persisted_reference_cache: dict[UUID, SimulationConfigSnapshot | None] = {}
+    subgroup_reference_cache: dict[SubgroupReferenceKey, SimulationConfigSnapshot] = {}
+    persisted_subgroup_reference_cache: dict[
+        SubgroupReferenceKey, SimulationConfigSnapshot | None
+    ] = {}
     case_hash_cache: dict[str, str] = {}
     persisted_case_hash_cache: dict[UUID, str | None] = {}
 
@@ -184,6 +186,8 @@ def ingest_archive(
                 db=db,
                 reference_cache=reference_cache,
                 persisted_reference_cache=persisted_reference_cache,
+                subgroup_reference_cache=subgroup_reference_cache,
+                persisted_subgroup_reference_cache=persisted_subgroup_reference_cache,
                 case_hash_cache=case_hash_cache,
                 persisted_case_hash_cache=persisted_case_hash_cache,
             )
@@ -227,6 +231,10 @@ def _process_simulation_for_ingest(
     db: Session,
     reference_cache: dict[str, SimulationConfigSnapshot],
     persisted_reference_cache: dict[UUID, SimulationConfigSnapshot | None],
+    subgroup_reference_cache: dict[SubgroupReferenceKey, SimulationConfigSnapshot],
+    persisted_subgroup_reference_cache: dict[
+        SubgroupReferenceKey, SimulationConfigSnapshot | None
+    ],
     case_hash_cache: dict[str, str],
     persisted_case_hash_cache: dict[UUID, str | None],
 ) -> tuple[SimulationCreate | None, bool]:
@@ -253,10 +261,31 @@ def _process_simulation_for_ingest(
     execution_id = parsed_simulation.execution_id
     case_name = _require_case_name(parsed_simulation)
     machine_id = _resolve_machine_id(parsed_simulation, db)
+    existing_simulation = _find_existing_simulation(db, execution_id)
 
-    if _is_duplicate_simulation(execution_id, parsed_simulation.execution_dir, db):
+    if existing_simulation is not None:
+        case = existing_simulation.case
+        _track_case_hash_grouping(
+            parsed_simulation=parsed_simulation,
+            case=case,
+            case_hash_cache=case_hash_cache,
+            persisted_case_hash_cache=persisted_case_hash_cache,
+            db=db,
+        )
+        logger.info(
+            "Simulation with execution_id='%s' already exists. Skipping duplicate "
+            "from %s.",
+            execution_id,
+            parsed_simulation.execution_dir,
+        )
         _seed_reference_cache_from_duplicate(
-            case_name, parsed_simulation, reference_cache
+            parsed_simulation=parsed_simulation,
+            case=case,
+            reference_cache=reference_cache,
+            persisted_reference_cache=persisted_reference_cache,
+            subgroup_reference_cache=subgroup_reference_cache,
+            persisted_subgroup_reference_cache=persisted_subgroup_reference_cache,
+            db=db,
         )
         return None, True
 
@@ -276,6 +305,8 @@ def _process_simulation_for_ingest(
         case=case,
         reference_cache=reference_cache,
         persisted_reference_cache=persisted_reference_cache,
+        subgroup_reference_cache=subgroup_reference_cache,
+        persisted_subgroup_reference_cache=persisted_subgroup_reference_cache,
         db=db,
     )
 
@@ -370,30 +401,44 @@ def _resolve_case(
     return result
 
 
-def _is_duplicate_simulation(
-    execution_id: str, execution_dir: str, db: Session
-) -> bool:
-    """Return True when a simulation with execution_id already exists."""
-    existing_sim = _find_existing_simulation(db, execution_id)
-
-    if not existing_sim:
-        return False
-
-    logger.info(
-        f"Simulation with execution_id='{execution_id}' "
-        f"already exists. Skipping duplicate from {execution_dir}."
-    )
-    return True
-
-
 def _seed_reference_cache_from_duplicate(
-    case_name: str,
     parsed_simulation: ParsedSimulation,
+    case: Case,
     reference_cache: dict[str, SimulationConfigSnapshot],
+    persisted_reference_cache: dict[UUID, SimulationConfigSnapshot | None],
+    subgroup_reference_cache: dict[SubgroupReferenceKey, SimulationConfigSnapshot],
+    persisted_subgroup_reference_cache: dict[
+        SubgroupReferenceKey, SimulationConfigSnapshot | None
+    ],
+    db: Session,
 ) -> None:
-    """Seed per-case reference cache using duplicate metadata when needed."""
-    if case_name not in reference_cache:
-        reference_cache[case_name] = _build_config_snapshot(parsed_simulation)
+    """Seed caches from persisted baselines when a duplicate is encountered."""
+    case_hash = parsed_simulation.case_hash
+    if case_hash:
+        reference_snapshot = _get_persisted_subgroup_reference_metadata(
+            case=case,
+            case_hash=case_hash,
+            persisted_subgroup_reference_cache=persisted_subgroup_reference_cache,
+            db=db,
+        )
+        if reference_snapshot is None:
+            return
+
+        subgroup_reference_cache.setdefault(
+            _build_subgroup_reference_key(case.id, case_hash),
+            reference_snapshot,
+        )
+        return
+
+    reference_snapshot = _get_persisted_case_reference_metadata(
+        case=case,
+        persisted_reference_cache=persisted_reference_cache,
+        db=db,
+    )
+    if reference_snapshot is None:
+        return
+
+    reference_cache.setdefault(case.name, reference_snapshot)
 
 
 def _build_simulation_create(
@@ -402,6 +447,10 @@ def _build_simulation_create(
     case: Case,
     reference_cache: dict[str, SimulationConfigSnapshot],
     persisted_reference_cache: dict[UUID, SimulationConfigSnapshot | None],
+    subgroup_reference_cache: dict[SubgroupReferenceKey, SimulationConfigSnapshot],
+    persisted_subgroup_reference_cache: dict[
+        SubgroupReferenceKey, SimulationConfigSnapshot | None
+    ],
     db: Session,
 ) -> SimulationCreate:
     """Create a SimulationCreate using reference simulation semantics.
@@ -421,17 +470,27 @@ def _build_simulation_create(
     db : Session
         Active database session for lookups and case resolution.
     """
-    case_name = case.name
-    reference_snapshot = _get_reference_metadata_for_case(
+    case_hash = parsed_simulation.case_hash
+    reference_snapshot = _get_reference_metadata_for_simulation(
         case=case,
-        case_name=case_name,
+        case_name=case.name,
+        case_hash=case_hash,
         reference_cache=reference_cache,
         persisted_reference_cache=persisted_reference_cache,
+        subgroup_reference_cache=subgroup_reference_cache,
+        persisted_subgroup_reference_cache=persisted_subgroup_reference_cache,
         db=db,
     )
 
     if reference_snapshot is None:
-        reference_cache[case_name] = _build_config_snapshot(parsed_simulation)
+        _cache_reference_snapshot(
+            case=case,
+            case_name=case.name,
+            case_hash=case_hash,
+            reference_snapshot=_build_config_snapshot(parsed_simulation),
+            reference_cache=reference_cache,
+            subgroup_reference_cache=subgroup_reference_cache,
+        )
 
         simulation = _validate_simulation_create(
             replace(prevalidated_draft, case_id=case.id)
@@ -440,7 +499,7 @@ def _build_simulation_create(
         logger.info(
             "Mapped reference simulation from %s: %s",
             parsed_simulation.execution_dir,
-            case_name,
+            case.name,
         )
 
         return simulation
@@ -591,6 +650,63 @@ def _validate_pre_case_draft(draft: SimulationCreateDraft) -> None:
         _HTTP_URL_ADAPTER.validate_python(draft.git_repository_url)
 
 
+def _build_subgroup_reference_key(
+    case_id: UUID, case_hash: str
+) -> SubgroupReferenceKey:
+    return (case_id, case_hash)
+
+
+def _cache_reference_snapshot(
+    *,
+    case: Case,
+    case_name: str,
+    case_hash: str | None,
+    reference_snapshot: SimulationConfigSnapshot,
+    reference_cache: dict[str, SimulationConfigSnapshot],
+    subgroup_reference_cache: dict[SubgroupReferenceKey, SimulationConfigSnapshot],
+) -> None:
+    """Store a new baseline snapshot in the appropriate in-batch cache."""
+    if case_hash:
+        subgroup_reference_cache[_build_subgroup_reference_key(case.id, case_hash)] = (
+            reference_snapshot
+        )
+        return
+
+    reference_cache[case_name] = reference_snapshot
+
+
+def _get_reference_metadata_for_simulation(
+    *,
+    case: Case,
+    case_name: str,
+    case_hash: str | None,
+    reference_cache: dict[str, SimulationConfigSnapshot],
+    persisted_reference_cache: dict[UUID, SimulationConfigSnapshot | None],
+    subgroup_reference_cache: dict[SubgroupReferenceKey, SimulationConfigSnapshot],
+    persisted_subgroup_reference_cache: dict[
+        SubgroupReferenceKey, SimulationConfigSnapshot | None
+    ],
+    db: Session,
+) -> SimulationConfigSnapshot | None:
+    """Resolve baseline metadata for a parsed simulation."""
+    if case_hash:
+        return _get_reference_metadata_for_subgroup(
+            case=case,
+            case_hash=case_hash,
+            subgroup_reference_cache=subgroup_reference_cache,
+            persisted_subgroup_reference_cache=persisted_subgroup_reference_cache,
+            db=db,
+        )
+
+    return _get_reference_metadata_for_case(
+        case=case,
+        case_name=case_name,
+        reference_cache=reference_cache,
+        persisted_reference_cache=persisted_reference_cache,
+        db=db,
+    )
+
+
 def _get_reference_metadata_for_case(
     case: Case,
     case_name: str,
@@ -619,26 +735,99 @@ def _get_reference_metadata_for_case(
     SimulationConfigSnapshot | None
         The reference config snapshot for the case, or None if no reference run exists.
     """
-    if case.reference_simulation_id is not None:
-        if case.id in persisted_reference_cache:
-            return persisted_reference_cache[case.id]
-
-        reference_simulation = (
-            db.query(Simulation)
-            .filter(Simulation.id == case.reference_simulation_id)
-            .first()
-        )
-
-        if reference_simulation:
-            reference_snapshot = _build_config_snapshot(reference_simulation)
-            persisted_reference_cache[case.id] = reference_snapshot
-
-            return reference_snapshot
-
-        persisted_reference_cache[case.id] = None
-        return None
+    persisted_reference = _get_persisted_case_reference_metadata(
+        case=case,
+        persisted_reference_cache=persisted_reference_cache,
+        db=db,
+    )
+    if persisted_reference is not None:
+        return persisted_reference
 
     return reference_cache.get(case_name)
+
+
+def _get_persisted_case_reference_metadata(
+    case: Case,
+    persisted_reference_cache: dict[UUID, SimulationConfigSnapshot | None],
+    db: Session,
+) -> SimulationConfigSnapshot | None:
+    """Resolve case-wide baseline metadata from the persisted reference simulation."""
+    if case.reference_simulation_id is None:
+        return None
+
+    if case.id in persisted_reference_cache:
+        return persisted_reference_cache[case.id]
+
+    reference_simulation = (
+        db.query(Simulation)
+        .filter(Simulation.id == case.reference_simulation_id)
+        .first()
+    )
+
+    if reference_simulation:
+        reference_snapshot = _build_config_snapshot(reference_simulation)
+        persisted_reference_cache[case.id] = reference_snapshot
+        return reference_snapshot
+
+    persisted_reference_cache[case.id] = None
+    return None
+
+
+def _get_reference_metadata_for_subgroup(
+    *,
+    case: Case,
+    case_hash: str,
+    subgroup_reference_cache: dict[SubgroupReferenceKey, SimulationConfigSnapshot],
+    persisted_subgroup_reference_cache: dict[
+        SubgroupReferenceKey, SimulationConfigSnapshot | None
+    ],
+    db: Session,
+) -> SimulationConfigSnapshot | None:
+    """Resolve baseline metadata for a hashed subgroup."""
+    subgroup_key = _build_subgroup_reference_key(case.id, case_hash)
+    persisted_reference = _get_persisted_subgroup_reference_metadata(
+        case=case,
+        case_hash=case_hash,
+        persisted_subgroup_reference_cache=persisted_subgroup_reference_cache,
+        db=db,
+    )
+    if persisted_reference is not None:
+        return persisted_reference
+
+    return subgroup_reference_cache.get(subgroup_key)
+
+
+def _get_persisted_subgroup_reference_metadata(
+    *,
+    case: Case,
+    case_hash: str,
+    persisted_subgroup_reference_cache: dict[
+        SubgroupReferenceKey, SimulationConfigSnapshot | None
+    ],
+    db: Session,
+) -> SimulationConfigSnapshot | None:
+    """Resolve subgroup baseline metadata from persisted simulations."""
+    subgroup_key = _build_subgroup_reference_key(case.id, case_hash)
+    if subgroup_key in persisted_subgroup_reference_cache:
+        return persisted_subgroup_reference_cache[subgroup_key]
+
+    reference_simulation = (
+        db.query(Simulation)
+        .filter(
+            Simulation.case_id == case.id,
+            Simulation.case_hash == case_hash,
+        )
+        .order_by(Simulation.created_at, Simulation.id)
+        .first()
+    )
+
+    if reference_simulation:
+        reference_snapshot = _build_config_snapshot(reference_simulation)
+        persisted_subgroup_reference_cache[subgroup_key] = reference_snapshot
+        return reference_snapshot
+
+    persisted_subgroup_reference_cache[subgroup_key] = None
+    return None
 
 
 def _get_or_create_case(db: Session, name: str, case_group: str | None = None) -> Case:

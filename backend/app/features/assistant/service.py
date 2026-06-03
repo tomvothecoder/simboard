@@ -69,16 +69,15 @@ def _add_identity_and_status(
         if snapshot.simulation.run_config_deltas:
             draft.sentences.append(
                 f"It is a non-reference run with {change_count} recorded "
-                "configuration change(s) versus the case reference simulation."
+                "configuration change(s)."
             )
             draft.add_citation("simulation.run_config_deltas")
         else:
             draft.sentences.append(
-                "It is a non-reference run, but SimBoard does not currently record "
-                "any configuration deltas for it."
+                "It is a non-reference run with no recorded configuration differences."
             )
             draft.caveats.append(
-                "This non-reference simulation has no recorded configuration deltas in SimBoard metadata."
+                "This non-reference simulation has no recorded configuration differences in SimBoard metadata."
             )
 
     if snapshot.machine and snapshot.machine.name:
@@ -217,7 +216,7 @@ def _add_diagnostics_and_followups(
 
     if snapshot.simulation.run_config_deltas:
         draft.followups.append(
-            "Compare this run against the case reference simulation to review the recorded configuration deltas."
+            "Use Compare to review the recorded configuration differences for this run."
         )
 
     if snapshot.simulation.known_issues:

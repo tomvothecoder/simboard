@@ -1516,6 +1516,90 @@ class TestReferenceRunIngestion:
         assert deltas["compiler"]["reference"] == "gcc-11"
         assert deltas["compiler"]["current"] == "gcc-12"
 
+    def test_same_case_hash_subgroup_uses_first_run_as_baseline(
+        self, db: Session
+    ) -> None:
+        """Runs with the same CASE_HASH diff against the first subgroup run."""
+        self._create_machine(db, "test-machine")
+
+        mock_simulations = {
+            "/path/to/1081185.251218-200945": self._make_metadata(
+                execution_id="1081185.251218-200945",
+                simulation_start_date="2020-01-01",
+                case_hash="hash-A",
+                compiler="gcc-11",
+            ),
+            "/path/to/1081186.251218-200946": self._make_metadata(
+                execution_id="1081186.251218-200946",
+                simulation_start_date="2020-06-01",
+                case_hash="hash-A",
+                compiler="gcc-12",
+            ),
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        by_execution_id = {sim.execution_id: sim for sim in result.simulations}
+        assert result.created_count == 2
+        assert by_execution_id["1081185.251218-200945"].run_config_deltas is None
+        assert by_execution_id["1081186.251218-200946"].run_config_deltas == {
+            "compiler": {"reference": "gcc-11", "current": "gcc-12"}
+        }
+
+    def test_different_case_hash_subgroups_use_independent_baselines(
+        self, db: Session
+    ) -> None:
+        """Different CASE_HASH values should not cross-contaminate deltas."""
+        self._create_machine(db, "test-machine")
+
+        mock_simulations = {
+            "/path/to/1081185.251218-200945": self._make_metadata(
+                execution_id="1081185.251218-200945",
+                simulation_start_date="2020-01-01",
+                case_hash="hash-A",
+                compiler="gcc-11",
+            ),
+            "/path/to/1081186.251218-200946": self._make_metadata(
+                execution_id="1081186.251218-200946",
+                simulation_start_date="2020-06-01",
+                case_hash="hash-A",
+                compiler="gcc-12",
+            ),
+            "/path/to/1081187.251218-200947": self._make_metadata(
+                execution_id="1081187.251218-200947",
+                simulation_start_date="2021-01-01",
+                case_hash="hash-B",
+                compiler="clang-16",
+            ),
+            "/path/to/1081188.251218-200948": self._make_metadata(
+                execution_id="1081188.251218-200948",
+                simulation_start_date="2021-06-01",
+                case_hash="hash-B",
+                compiler="clang-17",
+            ),
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        by_execution_id = {sim.execution_id: sim for sim in result.simulations}
+        assert result.created_count == 4
+        assert by_execution_id["1081185.251218-200945"].run_config_deltas is None
+        assert by_execution_id["1081187.251218-200947"].run_config_deltas is None
+        assert by_execution_id["1081186.251218-200946"].run_config_deltas == {
+            "compiler": {"reference": "gcc-11", "current": "gcc-12"}
+        }
+        assert by_execution_id["1081188.251218-200948"].run_config_deltas == {
+            "compiler": {"reference": "clang-16", "current": "clang-17"}
+        }
+
     def test_no_delta_when_configs_identical(self, db: Session) -> None:
         """Non-reference runs with identical config have run_config_deltas=None."""
         self._create_machine(db, "test-machine")
@@ -1723,6 +1807,382 @@ class TestReferenceRunIngestion:
         assert "compiler" in new_sim.run_config_deltas
         assert new_sim.run_config_deltas["compiler"]["reference"] == "gcc-11"
         assert new_sim.run_config_deltas["compiler"]["current"] == "gcc-12"
+
+    def test_incremental_ingestion_new_hash_subgroup_becomes_baseline(
+        self, db: Session
+    ) -> None:
+        """A new CASE_HASH subgroup should not diff against the case-wide reference."""
+        machine = self._create_machine(db, "test-machine")
+
+        user = User(
+            email="test@example.com",
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(user)
+        db.commit()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive",
+            status=IngestionStatus.SUCCESS,
+            machine_id=machine.id,
+            triggered_by=user.id,
+        )
+        db.add(ingestion)
+        db.commit()
+
+        case = Case(name="case1")
+        db.add(case)
+        db.flush()
+
+        sim = Simulation(
+            case_id=case.id,
+            execution_id="1081192.251218-200952",
+            case_hash="hash-A",
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            machine_id=machine.id,
+            simulation_start_date=datetime(2020, 1, 1),
+            initialization_type="test",
+            status=SimulationStatus.CREATED,
+            simulation_type=SimulationType.UNKNOWN,
+            created_by=user.id,
+            last_updated_by=user.id,
+            ingestion_id=ingestion.id,
+            compiler="gcc-11",
+            created_at=datetime(2020, 1, 1, 0, 0, 0),
+            updated_at=datetime(2020, 1, 1, 0, 0, 0),
+        )
+        db.add(sim)
+        db.flush()
+
+        assert sim.id is not None
+        case.reference_simulation_id = sim.id
+        db.commit()
+
+        mock_simulations = {
+            "/path/to/1081193.251218-200953": self._make_metadata(
+                execution_id="1081193.251218-200953",
+                simulation_start_date="2020-06-01",
+                case_hash="hash-B",
+                compiler="gcc-12",
+            ),
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        assert result.created_count == 1
+        assert result.simulations[0].run_config_deltas is None
+
+    def test_incremental_ingestion_uses_persisted_hash_subgroup_baseline(
+        self, db: Session
+    ) -> None:
+        """Hashed runs should diff against earliest persisted subgroup baseline."""
+        machine = self._create_machine(db, "test-machine")
+
+        user = User(
+            email="test@example.com",
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(user)
+        db.commit()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive",
+            status=IngestionStatus.SUCCESS,
+            machine_id=machine.id,
+            triggered_by=user.id,
+        )
+        db.add(ingestion)
+        db.commit()
+
+        case = Case(name="case1")
+        db.add(case)
+        db.flush()
+
+        case_reference = Simulation(
+            case_id=case.id,
+            execution_id="1081192.251218-200952",
+            case_hash="hash-A",
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            machine_id=machine.id,
+            simulation_start_date=datetime(2020, 1, 1),
+            initialization_type="test",
+            status=SimulationStatus.CREATED,
+            simulation_type=SimulationType.UNKNOWN,
+            created_by=user.id,
+            last_updated_by=user.id,
+            ingestion_id=ingestion.id,
+            compiler="gcc-11",
+            created_at=datetime(2020, 1, 1, 0, 0, 0),
+            updated_at=datetime(2020, 1, 1, 0, 0, 0),
+        )
+        subgroup_baseline = Simulation(
+            case_id=case.id,
+            execution_id="1081193.251218-200953",
+            case_hash="hash-B",
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            machine_id=machine.id,
+            simulation_start_date=datetime(2020, 2, 1),
+            initialization_type="test",
+            status=SimulationStatus.CREATED,
+            simulation_type=SimulationType.UNKNOWN,
+            created_by=user.id,
+            last_updated_by=user.id,
+            ingestion_id=ingestion.id,
+            compiler="clang-16",
+            created_at=datetime(2020, 2, 1, 0, 0, 0),
+            updated_at=datetime(2020, 2, 1, 0, 0, 0),
+        )
+        db.add(case_reference)
+        db.add(subgroup_baseline)
+        db.flush()
+
+        assert case_reference.id is not None
+        case.reference_simulation_id = case_reference.id
+        db.commit()
+
+        mock_simulations = {
+            "/path/to/1081194.251218-200954": self._make_metadata(
+                execution_id="1081194.251218-200954",
+                simulation_start_date="2020-06-01",
+                case_hash="hash-B",
+                compiler="clang-17",
+            ),
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        assert result.created_count == 1
+        assert result.simulations[0].run_config_deltas == {
+            "compiler": {"reference": "clang-16", "current": "clang-17"}
+        }
+
+    def test_duplicate_hash_run_does_not_seed_new_hash_from_case_reference(
+        self, db: Session
+    ) -> None:
+        """A duplicate in one hash subgroup must not contaminate another subgroup."""
+        machine = self._create_machine(db, "test-machine")
+
+        user = User(
+            email="test@example.com",
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(user)
+        db.commit()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive",
+            status=IngestionStatus.SUCCESS,
+            machine_id=machine.id,
+            triggered_by=user.id,
+        )
+        db.add(ingestion)
+        db.commit()
+
+        case = Case(name="case1")
+        db.add(case)
+        db.flush()
+
+        sim = Simulation(
+            case_id=case.id,
+            execution_id="1081192.251218-200952",
+            case_hash="hash-A",
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            machine_id=machine.id,
+            simulation_start_date=datetime(2020, 1, 1),
+            initialization_type="test",
+            status=SimulationStatus.CREATED,
+            simulation_type=SimulationType.UNKNOWN,
+            created_by=user.id,
+            last_updated_by=user.id,
+            ingestion_id=ingestion.id,
+            compiler="gcc-11",
+            created_at=datetime(2020, 1, 1, 0, 0, 0),
+            updated_at=datetime(2020, 1, 1, 0, 0, 0),
+        )
+        db.add(sim)
+        db.flush()
+
+        assert sim.id is not None
+        case.reference_simulation_id = sim.id
+        db.commit()
+
+        mock_simulations = {
+            "/path/to/1081192.251218-200952": self._make_metadata(
+                execution_id="1081192.251218-200952",
+                simulation_start_date="2020-01-01",
+                case_hash="hash-A",
+                compiler="gcc-11",
+            ),
+            "/path/to/1081193.251218-200953": self._make_metadata(
+                execution_id="1081193.251218-200953",
+                simulation_start_date="2020-06-01",
+                case_hash="hash-B",
+                compiler="gcc-12",
+            ),
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        assert result.duplicate_count == 1
+        assert result.created_count == 1
+        assert result.simulations[0].run_config_deltas is None
+
+    def test_duplicate_non_baseline_hash_run_uses_authoritative_subgroup_baseline(
+        self, db: Session
+    ) -> None:
+        """Duplicate hashed runs should seed from persisted subgroup baseline only."""
+        machine = self._create_machine(db, "test-machine")
+
+        user = User(
+            email="test@example.com",
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(user)
+        db.commit()
+
+        ingestion = Ingestion(
+            source_type=IngestionSourceType.HPC_PATH,
+            source_reference="/archive",
+            status=IngestionStatus.SUCCESS,
+            machine_id=machine.id,
+            triggered_by=user.id,
+        )
+        db.add(ingestion)
+        db.commit()
+
+        case = Case(name="case1")
+        db.add(case)
+        db.flush()
+
+        case_reference = Simulation(
+            case_id=case.id,
+            execution_id="1081192.251218-200952",
+            case_hash="hash-A",
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            machine_id=machine.id,
+            simulation_start_date=datetime(2020, 1, 1),
+            initialization_type="test",
+            status=SimulationStatus.CREATED,
+            simulation_type=SimulationType.UNKNOWN,
+            created_by=user.id,
+            last_updated_by=user.id,
+            ingestion_id=ingestion.id,
+            compiler="gcc-11",
+            created_at=datetime(2020, 1, 1, 0, 0, 0),
+            updated_at=datetime(2020, 1, 1, 0, 0, 0),
+        )
+        subgroup_baseline = Simulation(
+            case_id=case.id,
+            execution_id="1081193.251218-200953",
+            case_hash="hash-B",
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            machine_id=machine.id,
+            simulation_start_date=datetime(2020, 2, 1),
+            initialization_type="test",
+            status=SimulationStatus.CREATED,
+            simulation_type=SimulationType.UNKNOWN,
+            created_by=user.id,
+            last_updated_by=user.id,
+            ingestion_id=ingestion.id,
+            compiler="gcc-21",
+            created_at=datetime(2020, 2, 1, 0, 0, 0),
+            updated_at=datetime(2020, 2, 1, 0, 0, 0),
+        )
+        subgroup_non_baseline = Simulation(
+            case_id=case.id,
+            execution_id="1081194.251218-200954",
+            case_hash="hash-B",
+            compset="FHIST",
+            compset_alias="test_alias",
+            grid_name="grid1",
+            grid_resolution="0.9x1.25",
+            machine_id=machine.id,
+            simulation_start_date=datetime(2020, 3, 1),
+            initialization_type="test",
+            status=SimulationStatus.CREATED,
+            simulation_type=SimulationType.UNKNOWN,
+            created_by=user.id,
+            last_updated_by=user.id,
+            ingestion_id=ingestion.id,
+            compiler="gcc-22",
+            run_config_deltas={
+                "compiler": {"reference": "gcc-21", "current": "gcc-22"}
+            },
+            created_at=datetime(2020, 3, 1, 0, 0, 0),
+            updated_at=datetime(2020, 3, 1, 0, 0, 0),
+        )
+        db.add(case_reference)
+        db.add(subgroup_baseline)
+        db.add(subgroup_non_baseline)
+        db.flush()
+
+        assert case_reference.id is not None
+        case.reference_simulation_id = case_reference.id
+        db.commit()
+
+        mock_simulations = {
+            "/path/to/1081194.251218-200954": self._make_metadata(
+                execution_id="1081194.251218-200954",
+                simulation_start_date="2020-03-01",
+                case_hash="hash-B",
+                compiler="gcc-22",
+            ),
+            "/path/to/1081195.251218-200955": self._make_metadata(
+                execution_id="1081195.251218-200955",
+                simulation_start_date="2020-06-01",
+                case_hash="hash-B",
+                compiler="gcc-23",
+            ),
+        }
+
+        with patch(
+            "app.features.ingestion.ingest.main_parser",
+            return_value=(_parsed_simulations_from_mapping(mock_simulations), 0),
+        ):
+            result = ingest_archive(Path("/tmp/a.zip"), Path("/tmp/o"), db)
+
+        assert result.duplicate_count == 1
+        assert result.created_count == 1
+        assert result.simulations[0].run_config_deltas == {
+            "compiler": {"reference": "gcc-21", "current": "gcc-23"}
+        }
 
     def test_incremental_ingestion_normalizes_git_url_for_delta(
         self, db: Session

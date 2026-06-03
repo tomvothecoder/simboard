@@ -115,7 +115,7 @@ const getSimulationChangeTitle = (simulation: CaseSimulationListItem) => {
     }
   }
 
-  return `${simulation.changeCount} changes from reference`;
+  return `${simulation.changeCount} recorded configuration changes`;
 };
 
 export const CasesPage = ({ simulations }: CasesPageProps) => {

@@ -277,7 +277,7 @@ export const SimulationDetailsView = ({
                       <span className="text-sm">{simulation.isReference ? 'Yes' : 'No'}</span>
                     </FieldRow>
                     {!simulation.isReference && (
-                      <FieldRow label="Changes vs reference">
+                      <FieldRow label="Recorded config changes">
                         <span className="text-sm">{simulation.changeCount}</span>
                       </FieldRow>
                     )}

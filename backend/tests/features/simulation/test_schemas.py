@@ -440,21 +440,45 @@ class TestSimulationSummaryOutSchema:
     def test_case_hash_schema_descriptions_reflect_grouping_semantics(self):
         create_schema = SimulationCreate.model_json_schema()
         create_description = create_schema["properties"]["caseHash"]["description"]
+        create_delta_description = create_schema["properties"]["runConfigDeltas"][
+            "description"
+        ]
         assert (
             "group related executions or sub-cases within a case" in create_description
         )
         assert "not top-level case identity" in create_description
+        assert "stored baseline for its case or case-hash subgroup" in (
+            create_delta_description
+        )
 
         summary_schema = SimulationSummaryOut.model_json_schema()
         summary_description = summary_schema["properties"]["caseHash"]["description"]
+        summary_change_description = summary_schema["properties"]["changeCount"][
+            "description"
+        ]
         assert (
             "group related executions or sub-cases within a case" in summary_description
+        )
+        assert "recorded configuration differences for this run" in (
+            summary_change_description
         )
 
         simulation_out_schema = SimulationOut.model_json_schema()
         out_description = simulation_out_schema["properties"]["caseHash"]["description"]
+        out_delta_description = simulation_out_schema["properties"]["runConfigDeltas"][
+            "description"
+        ]
+        out_change_description = simulation_out_schema["properties"]["changeCount"][
+            "description"
+        ]
         assert "group related executions or sub-cases within a case" in out_description
         assert "not top-level case identity" in out_description
+        assert "stored baseline for its case or case-hash subgroup" in (
+            out_delta_description
+        )
+        assert "recorded configuration differences for this run" in (
+            out_change_description
+        )
 
     def test_valid_summary_fields(self):
         summary = SimulationSummaryOut(

@@ -262,8 +262,8 @@ class SimulationCreate(CamelInBaseModel):
             None,
             description=(
                 "Configuration differences between this simulation and the "
-                "reference simulation for the same case. None for reference "
-                "simulations or when no differences exist."
+                "stored baseline for its case or case-hash subgroup. None for "
+                "baseline simulations or when no differences exist."
             ),
         ),
     ]
@@ -330,8 +330,8 @@ class SimulationSummaryOut(CamelOutBaseModel):
         Field(
             ...,
             description=(
-                "Number of configuration differences vs the reference simulation. "
-                "0 for reference simulations."
+                "Number of recorded configuration differences for this run. "
+                "0 when no differences are recorded."
             ),
         ),
     ]
@@ -467,8 +467,8 @@ class SimulationOut(CamelOutBaseModel):
         Field(
             ...,
             description=(
-                "Number of configuration differences vs the reference simulation. "
-                "0 for reference simulations."
+                "Number of recorded configuration differences for this run. "
+                "0 when no differences are recorded."
             ),
         ),
     ]
@@ -617,8 +617,8 @@ class SimulationOut(CamelOutBaseModel):
             None,
             description=(
                 "Configuration differences between this simulation and the "
-                "reference simulation for the same case. None for reference "
-                "simulations or when no differences exist."
+                "stored baseline for its case or case-hash subgroup. None for "
+                "baseline simulations or when no differences exist."
             ),
         ),
     ]

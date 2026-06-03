@@ -260,11 +260,11 @@ class TestBuildSimulationSummary:
         )
 
         assert (
-            "It is a non-reference run, but SimBoard does not currently record any configuration deltas for it."
+            "It is a non-reference run with no recorded configuration differences."
             in summary.answer
         )
         assert (
-            "This non-reference simulation has no recorded configuration deltas in SimBoard metadata."
+            "This non-reference simulation has no recorded configuration differences in SimBoard metadata."
             in summary.caveats
         )
 
