@@ -11,6 +11,7 @@ from pydantic_ai.exceptions import (
     ModelHTTPError,
     UnexpectedModelBehavior,
 )
+from sqlalchemy.ext.asyncio import async_object_session
 
 from app.core.config import settings
 from app.features.assistant.llm_generator import AssistantLLMConfig, SummaryLLMGenerator
@@ -30,11 +31,15 @@ from app.features.assistant.snapshot import (
     SnapshotBudgetExceededError,
     build_simulation_snapshot,
 )
+from app.features.simulation.anchor import resolve_anchor_run_state_async
 from app.features.simulation.models import Simulation
 
 _SNAPSHOT_PATH_ACCESSORS = {
     "simulation.id": lambda snapshot: snapshot.simulation.id,
     "simulation.execution_id": lambda snapshot: snapshot.simulation.execution_id,
+    "simulation.case_hash": lambda snapshot: snapshot.simulation.case_hash,
+    "simulation.is_anchor_run": lambda snapshot: snapshot.simulation.is_anchor_run,
+    "simulation.anchor_simulation_id": lambda snapshot: snapshot.simulation.anchor_simulation_id,
     "simulation.description": lambda snapshot: snapshot.simulation.description,
     "simulation.compset": lambda snapshot: snapshot.simulation.compset,
     "simulation.compset_alias": lambda snapshot: snapshot.simulation.compset_alias,
@@ -61,7 +66,6 @@ _SNAPSHOT_PATH_ACCESSORS = {
     "simulation.run_config_deltas": lambda snapshot: snapshot.simulation.run_config_deltas,
     "case.name": lambda snapshot: snapshot.case.name,
     "case.case_group": lambda snapshot: snapshot.case.case_group,
-    "case.reference_simulation_id": lambda snapshot: snapshot.case.reference_simulation_id,
     "machine.name": lambda snapshot: snapshot.machine.name
     if snapshot.machine
     else None,
@@ -124,7 +128,19 @@ async def generate_simulation_summary(
     )
 
     try:
-        snapshot = build_simulation_snapshot(simulation)
+        async_session = (
+            async_object_session(simulation) if simulation is not None else None
+        )
+        anchor_state = (
+            await resolve_anchor_run_state_async(async_session, simulation)
+            if async_session is not None
+            else None
+        )
+        snapshot = (
+            build_simulation_snapshot(simulation, anchor_state=anchor_state)
+            if anchor_state is not None
+            else build_simulation_snapshot(simulation)
+        )
     except SnapshotBudgetExceededError as exc:
         if not allow_llm:
             return _build_deterministic_result(

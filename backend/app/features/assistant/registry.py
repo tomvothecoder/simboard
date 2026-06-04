@@ -28,6 +28,18 @@ _CITATION_REGISTRY = {
         source_type="simulation_field",
         label="Execution ID",
     ),
+    "simulation.case_hash": CitationRegistryEntry(
+        source_type="simulation_field",
+        label="Case hash",
+    ),
+    "simulation.is_anchor_run": CitationRegistryEntry(
+        source_type="simulation_field",
+        label="Anchor run status",
+    ),
+    "simulation.anchor_simulation_id": CitationRegistryEntry(
+        source_type="simulation_field",
+        label="Comparison anchor",
+    ),
     "simulation.description": CitationRegistryEntry(
         source_type="simulation_field",
         label="Description",
@@ -131,10 +143,6 @@ _CITATION_REGISTRY = {
     "case.case_group": CitationRegistryEntry(
         source_type="case_field",
         label="Case group",
-    ),
-    "case.reference_simulation_id": CitationRegistryEntry(
-        source_type="case_field",
-        label="Reference simulation",
     ),
     "machine.name": CitationRegistryEntry(
         source_type="machine_field",

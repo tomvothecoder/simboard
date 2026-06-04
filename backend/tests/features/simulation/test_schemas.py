@@ -116,7 +116,8 @@ class TestSimulationOutSchema:
             "case_name": "test_case",
             "execution_id": "1081156.251218-200923",
             "case_hash": "abc123",
-            "is_reference": True,
+            "is_anchor_run": True,
+            "anchor_simulation_id": uuid4(),
             "change_count": 0,
             "compset": "AQUAPLANET",
             "compset_alias": "QPC4",
@@ -200,7 +201,8 @@ class TestSimulationOutSchema:
             "case_name": "test_case",
             "execution_id": "1081156.251218-200923",
             "case_hash": "abc123",
-            "is_reference": False,
+            "is_anchor_run": False,
+            "anchor_simulation_id": uuid4(),
             "change_count": 2,
             "compset": "AQUAPLANET",
             "compset_alias": "QPC4",
@@ -299,7 +301,8 @@ class TestSimulationOutSchema:
             case_id=uuid4(),
             case_name="test_case",
             execution_id="1081156.251218-200923",
-            is_reference=True,
+            is_anchor_run=True,
+            anchor_simulation_id=uuid4(),
             change_count=0,
             compset="AQUAPLANET",
             compset_alias="QPC4",
@@ -374,7 +377,8 @@ class TestSimulationOutSchema:
             case_id=uuid4(),
             case_name="test_case",
             execution_id="1081156.251218-200923",
-            is_reference=True,
+            is_anchor_run=True,
+            anchor_simulation_id=uuid4(),
             change_count=0,
             compset="AQUAPLANET",
             compset_alias="QPC4",
@@ -447,8 +451,9 @@ class TestSimulationSummaryOutSchema:
             "group related executions or sub-cases within a case" in create_description
         )
         assert "not top-level case identity" in create_description
-        assert "stored baseline for its case or case-hash subgroup" in (
-            create_delta_description
+        assert (
+            "comparison anchor in the same case-hash subgroup"
+            in create_delta_description
         )
 
         summary_schema = SimulationSummaryOut.model_json_schema()
@@ -473,8 +478,8 @@ class TestSimulationSummaryOutSchema:
         ]
         assert "group related executions or sub-cases within a case" in out_description
         assert "not top-level case identity" in out_description
-        assert "stored baseline for its case or case-hash subgroup" in (
-            out_delta_description
+        assert (
+            "comparison anchor in the same case-hash subgroup" in out_delta_description
         )
         assert "recorded configuration differences for this run" in (
             out_change_description
@@ -486,28 +491,33 @@ class TestSimulationSummaryOutSchema:
             execution_id="1081156.251218-200923",
             case_hash=None,
             status="created",
-            is_reference=True,
+            is_anchor_run=False,
+            anchor_simulation_id=None,
             change_count=0,
             simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
             simulation_end_date=None,
         )
-        assert summary.is_reference is True
+        assert summary.is_anchor_run is False
+        assert summary.anchor_simulation_id is None
         assert summary.case_hash is None
         assert summary.change_count == 0
         assert summary.simulation_end_date is None
 
-    def test_non_reference_with_changes(self):
+    def test_non_anchor_with_changes(self):
+        anchor_id = uuid4()
         summary = SimulationSummaryOut(
             id=uuid4(),
             execution_id="1081290.251218-211543",
             case_hash="hash-2",
             status="completed",
-            is_reference=False,
+            is_anchor_run=False,
+            anchor_simulation_id=anchor_id,
             change_count=3,
             simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
             simulation_end_date=datetime(2023, 12, 31, 0, 0, 0),
         )
-        assert summary.is_reference is False
+        assert summary.is_anchor_run is False
+        assert summary.anchor_simulation_id == anchor_id
         assert summary.case_hash == "hash-2"
         assert summary.change_count == 3
         assert summary.simulation_end_date == datetime(2023, 12, 31, 0, 0, 0)
@@ -516,28 +526,30 @@ class TestSimulationSummaryOutSchema:
 class TestCaseOutSchema:
     def test_case_out_with_nested_simulations(self):
         sim_id = uuid4()
+        other_id = uuid4()
         case_out = CaseOut(
             id=uuid4(),
             name="v3.LR.historical_0121",
             case_group="ensemble_v3",
-            reference_simulation_id=sim_id,
             simulations=[
                 SimulationSummaryOut(
                     id=sim_id,
                     execution_id="1081156.251218-200923",
                     case_hash="hash-1",
                     status="completed",
-                    is_reference=True,
+                    is_anchor_run=True,
+                    anchor_simulation_id=sim_id,
                     change_count=0,
                     simulation_start_date=datetime(2023, 1, 1, 0, 0, 0),
                     simulation_end_date=datetime(2023, 12, 31, 0, 0, 0),
                 ),
                 SimulationSummaryOut(
-                    id=uuid4(),
+                    id=other_id,
                     execution_id="1081290.251218-211543",
                     case_hash="hash-2",
                     status="completed",
-                    is_reference=False,
+                    is_anchor_run=False,
+                    anchor_simulation_id=other_id,
                     change_count=2,
                     simulation_start_date=datetime(2023, 2, 1, 0, 0, 0),
                     simulation_end_date=None,
@@ -551,7 +563,8 @@ class TestCaseOutSchema:
         assert case_out.name == "v3.LR.historical_0121"
         assert case_out.case_group == "ensemble_v3"
         assert len(case_out.simulations) == 2
-        assert case_out.simulations[0].is_reference is True
+        assert case_out.simulations[0].is_anchor_run is True
+        assert case_out.simulations[0].anchor_simulation_id == sim_id
         assert case_out.simulations[0].case_hash == "hash-1"
         assert case_out.machine_names == ["chrysalis"]
         assert case_out.hpc_usernames == ["ac.tvo"]
@@ -563,14 +576,12 @@ class TestCaseOutSchema:
             id=uuid4(),
             name="empty_case",
             case_group=None,
-            reference_simulation_id=None,
             simulations=[],
             machine_names=[],
             hpc_usernames=[],
             created_at=datetime(2023, 1, 1, 0, 0, 0),
             updated_at=datetime(2023, 1, 2, 0, 0, 0),
         )
-        assert case_out.reference_simulation_id is None
         assert case_out.simulations == []
         assert case_out.machine_names == []
         assert case_out.hpc_usernames == []

@@ -31,6 +31,9 @@ def _make_snapshot() -> SimulationSnapshot:
         simulation=SnapshotSimulationFields(
             id="simulation-1",
             execution_id="assistant-livai-exec",
+            case_hash="hash-1",
+            is_anchor_run=True,
+            anchor_simulation_id="simulation-1",
             description="LivAI-backed simulation summary test.",
             compset="AQUAPLANET",
             compset_alias="QPC4",
@@ -45,10 +48,7 @@ def _make_snapshot() -> SimulationSnapshot:
             simulation_end_date="2023-12-31T00:00:00Z",
             git_tag="v1.0.0",
         ),
-        case=SnapshotCaseFields(
-            name="assistant_livai_case",
-            reference_simulation_id="simulation-1",
-        ),
+        case=SnapshotCaseFields(name="assistant_livai_case"),
         snapshot_caveats=[],
     )
 

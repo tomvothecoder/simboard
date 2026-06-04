@@ -56,29 +56,34 @@ def _add_identity_and_status(
     )
 
     type_bits = [snapshot.simulation.simulation_type]
-    if snapshot.case.reference_simulation_id:
-        draft.add_citation("case.reference_simulation_id")
-
-    if (
-        snapshot.case.reference_simulation_id
-        and snapshot.case.reference_simulation_id == snapshot.simulation.id
-    ):
-        type_bits.append("reference")
+    if snapshot.simulation.case_hash is None:
+        type_bits.append("legacy")
+        draft.sentences.append("It is a legacy run without a comparison anchor.")
+        draft.add_citation("simulation.case_hash")
+    elif snapshot.simulation.is_anchor_run:
+        type_bits.append("anchor")
+        draft.sentences.append("It is the anchor run for its case-hash subgroup.")
+        draft.add_citation("simulation.is_anchor_run")
+        draft.add_citation("simulation.anchor_simulation_id")
+        draft.add_citation("simulation.case_hash")
     else:
-        type_bits.append("non-reference")
+        type_bits.append("anchored")
         if snapshot.simulation.run_config_deltas:
             draft.sentences.append(
-                f"It is a non-reference run with {change_count} recorded "
-                "configuration change(s)."
+                "It is a run with "
+                f"{change_count} recorded configuration change(s) from its "
+                "comparison anchor."
             )
             draft.add_citation("simulation.run_config_deltas")
         else:
             draft.sentences.append(
-                "It is a non-reference run with no recorded configuration differences."
+                "It has no recorded configuration differences from its comparison anchor."
             )
             draft.caveats.append(
-                "This non-reference simulation has no recorded configuration differences in SimBoard metadata."
+                "This simulation has no recorded configuration differences from its comparison anchor in SimBoard metadata."
             )
+        draft.add_citation("simulation.anchor_simulation_id")
+        draft.add_citation("simulation.case_hash")
 
     if snapshot.machine and snapshot.machine.name:
         draft.sentences.append(
@@ -221,7 +226,7 @@ def _add_diagnostics_and_followups(
 
     if snapshot.simulation.known_issues:
         draft.followups.append(
-            "Review the recorded known issues before using this simulation as a baseline."
+            "Review the recorded known issues before using this simulation for comparison context."
         )
 
     output_artifacts = [

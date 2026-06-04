@@ -19,6 +19,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  applyBrowseUrlState,
+  hasDeprecatedBrowseSearchParams,
+  normalizeBrowseSearchParams,
+  resetBrowseUrlState,
+} from '@/features/browse/browseSearchParams';
 import { BrowseFiltersSidePanel } from '@/features/browse/components/BrowseFiltersSidePanel';
 import { SimulationResultCards } from '@/features/browse/components/SimulationResults/SimulationResultsCards';
 import { SimulationResultsTable } from '@/features/browse/components/SimulationResults/SimulationResultsTable';
@@ -59,9 +65,6 @@ export interface FilterState {
   compiler: string[];
   status: string[];
 
-  // Reference Status
-  referenceStatus: string;
-
   // Metadata & Provenance
   gitTag: string[];
   createdBy: string[];
@@ -93,9 +96,6 @@ const createEmptyFilters = (): FilterState => ({
   compiler: [],
   status: [],
 
-  // Reference Status
-  referenceStatus: '',
-
   // Metadata & Provenance
   gitTag: [],
   createdBy: [],
@@ -103,13 +103,12 @@ const createEmptyFilters = (): FilterState => ({
 });
 
 const FILTER_KEYS = Object.keys(createEmptyFilters()) as (keyof FilterState)[];
-const MULTI_SELECT_FILTER_KEYS = FILTER_KEYS.filter((key) => key !== 'referenceStatus');
+const MULTI_SELECT_FILTER_KEYS = FILTER_KEYS;
 
 const areStringArraysEqual = (left: string[], right: string[]): boolean =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
 const areFiltersEqual = (left: FilterState, right: FilterState): boolean =>
-  left.referenceStatus === right.referenceStatus &&
   MULTI_SELECT_FILTER_KEYS.every((key) =>
     areStringArraysEqual(left[key] as string[], right[key] as string[]),
   );
@@ -296,9 +295,6 @@ export const BrowsePage = ({
         }
       }
 
-      if (appliedFilters.referenceStatus === 'reference' && !record.isReference) return false;
-      if (appliedFilters.referenceStatus === 'non-reference' && record.isReference) return false;
-
       return true;
     });
   }, [simulations, appliedFilters]);
@@ -359,12 +355,6 @@ export const BrowsePage = ({
       }
     });
 
-    const referenceStatus = searchParams.get('referenceStatus');
-    next.referenceStatus =
-      referenceStatus !== null && ['', 'reference', 'non-reference'].includes(referenceStatus)
-        ? referenceStatus
-        : '';
-
     setAppliedFilters((current) => (areFiltersEqual(current, next) ? current : next));
 
     // Sync view, page, pageSize from URL (handles back/forward navigation).
@@ -372,6 +362,14 @@ export const BrowsePage = ({
     setPage(parsePage(searchParams));
     setPageSize(parsePageSize(searchParams));
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!hasDeprecatedBrowseSearchParams(searchParams)) {
+      return;
+    }
+
+    setSearchParams(normalizeBrowseSearchParams(searchParams), { replace: true });
+  }, [searchParams, setSearchParams]);
 
   // Reset page to 1 when filters/case change (skip the initial URL→state sync).
   const prevPageResetSignature = useRef<string | null>(null);
@@ -381,7 +379,7 @@ export const BrowsePage = ({
     });
 
     if (prevPageResetSignature.current === null) {
-      // First render — record reference without resetting page.
+      // First render — record initial state without resetting page.
       prevPageResetSignature.current = currentSignature;
       return;
     }
@@ -409,38 +407,16 @@ export const BrowsePage = ({
     }
 
     setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-
-        for (const key of FILTER_KEYS) {
-          const value = appliedFilters[key];
-          if (Array.isArray(value) && value.length) {
-            next.set(key, serializeArrayFilter(value));
-          } else if (typeof value === 'string' && value) {
-            next.set(key, value);
-          } else {
-            next.delete(key);
-          }
-        }
-
-        if (viewMode === 'grid') {
-          next.set('view', 'grid');
-        } else {
-          next.delete('view');
-        }
-        if (page > 1) {
-          next.set('page', String(page));
-        } else {
-          next.delete('page');
-        }
-        if (pageSize !== 25) {
-          next.set('pageSize', String(pageSize));
-        } else {
-          next.delete('pageSize');
-        }
-
-        return next;
-      },
+      (prev) =>
+        applyBrowseUrlState({
+          currentParams: prev,
+          filters: appliedFilters,
+          filterKeys: FILTER_KEYS,
+          page,
+          pageSize,
+          serializeArrayFilter,
+          viewMode,
+        }),
       { replace: true },
     );
   }, [appliedFilters, viewMode, page, pageSize, setSearchParams]);
@@ -450,16 +426,7 @@ export const BrowsePage = ({
     skipNextFilterUrlSync.current = true;
     setAppliedFilters(createEmptyFilters());
     setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-
-        FILTER_KEYS.forEach((key) => {
-          next.delete(key);
-        });
-
-        next.delete('page');
-        return next;
-      },
+      (prev) => resetBrowseUrlState({ currentParams: prev, filterKeys: FILTER_KEYS }),
       { replace: true },
     );
   };

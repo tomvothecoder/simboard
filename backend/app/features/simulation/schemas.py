@@ -261,9 +261,9 @@ class SimulationCreate(CamelInBaseModel):
         Field(
             None,
             description=(
-                "Configuration differences between this simulation and the "
-                "stored baseline for its case or case-hash subgroup. None for "
-                "baseline simulations or when no differences exist."
+                "Configuration differences between this simulation and its "
+                "comparison anchor in the same case-hash subgroup when one "
+                "exists. None when no differences are recorded."
             ),
         ),
     ]
@@ -318,11 +318,23 @@ class SimulationSummaryOut(CamelOutBaseModel):
     status: Annotated[
         SimulationStatus, Field(..., description="Current status of the simulation")
     ]
-    is_reference: Annotated[
+    is_anchor_run: Annotated[
         bool,
         Field(
             ...,
-            description="Whether this simulation is the reference for its case",
+            description=(
+                "Whether this simulation is the anchor run for its case-hash subgroup."
+            ),
+        ),
+    ]
+    anchor_simulation_id: Annotated[
+        UUID | None,
+        Field(
+            None,
+            description=(
+                "ID of the comparison anchor run for this simulation's "
+                "case-hash subgroup. Null for legacy runs without CASE_HASH."
+            ),
         ),
     ]
     change_count: Annotated[
@@ -376,10 +388,6 @@ class CaseOut(CamelOutBaseModel):
                 "Groups related cases (e.g. ensemble members) together."
             ),
         ),
-    ]
-    reference_simulation_id: Annotated[
-        UUID | None,
-        Field(None, description="ID of the reference simulation for this case."),
     ]
     simulations: Annotated[
         list[SimulationSummaryOut],
@@ -455,11 +463,23 @@ class SimulationOut(CamelOutBaseModel):
             ),
         ),
     ]
-    is_reference: Annotated[
+    is_anchor_run: Annotated[
         bool,
         Field(
             ...,
-            description="Whether this simulation is the reference for its case",
+            description=(
+                "Whether this simulation is the anchor run for its case-hash subgroup."
+            ),
+        ),
+    ]
+    anchor_simulation_id: Annotated[
+        UUID | None,
+        Field(
+            None,
+            description=(
+                "ID of the comparison anchor run for this simulation's "
+                "case-hash subgroup. Null for legacy runs without CASE_HASH."
+            ),
         ),
     ]
     change_count: Annotated[
@@ -616,9 +636,9 @@ class SimulationOut(CamelOutBaseModel):
         Field(
             None,
             description=(
-                "Configuration differences between this simulation and the "
-                "stored baseline for its case or case-hash subgroup. None for "
-                "baseline simulations or when no differences exist."
+                "Configuration differences between this simulation and its "
+                "comparison anchor in the same case-hash subgroup when one "
+                "exists. None when no differences are recorded."
             ),
         ),
     ]

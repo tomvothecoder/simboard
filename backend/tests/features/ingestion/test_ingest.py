@@ -1443,8 +1443,7 @@ class TestReferenceRunIngestion:
         return base
 
     def test_reference_run_selected_from_multiple_runs(self, db: Session) -> None:
-        """First run per case is reference (None deltas), subsequent runs
-        with config differences get a delta dict."""
+        """First hashed subgroup run is anchor; later subgroup run records deltas."""
         self._create_machine(db, "test-machine")
 
         # Two runs with the same case_name but different compilers
@@ -1452,11 +1451,13 @@ class TestReferenceRunIngestion:
             "/path/to/1081183.251218-200943": self._make_metadata(
                 execution_id="1081183.251218-200943",
                 simulation_start_date="2020-01-01",
+                case_hash="hash-ingest-1",
                 compiler="gcc-11",
             ),
             "/path/to/1081184.251218-200944": self._make_metadata(
                 execution_id="1081184.251218-200944",
                 simulation_start_date="2020-06-01",
+                case_hash="hash-ingest-1",
                 compiler="gcc-12",
             ),
         }
@@ -1479,18 +1480,20 @@ class TestReferenceRunIngestion:
         assert len(non_reference) == 1
 
     def test_config_delta_stored_for_non_reference_run(self, db: Session) -> None:
-        """Non-reference runs with config differences record deltas as a dict."""
+        """Hashed non-anchor runs with config differences record deltas as a dict."""
         self._create_machine(db, "test-machine")
 
         mock_simulations = {
             "/path/to/1081185.251218-200945": self._make_metadata(
                 execution_id="1081185.251218-200945",
                 simulation_start_date="2020-01-01",
+                case_hash="hash-ingest-2",
                 compiler="gcc-11",
             ),
             "/path/to/1081186.251218-200946": self._make_metadata(
                 execution_id="1081186.251218-200946",
                 simulation_start_date="2020-06-01",
+                case_hash="hash-ingest-2",
                 compiler="gcc-12",
             ),
         }
@@ -1729,7 +1732,7 @@ class TestReferenceRunIngestion:
         """A new run under an existing case records config delta."""
         machine = self._create_machine(db, "test-machine")
 
-        # Pre-populate DB with a reference simulation
+        # Pre-populate DB with a hashed subgroup anchor simulation
         user = User(
             email="test@example.com",
             is_active=True,
@@ -1755,6 +1758,7 @@ class TestReferenceRunIngestion:
         sim = Simulation(
             case_id=case.id,
             execution_id="1081192.251218-200952",
+            case_hash="hash-A",
             compset="FHIST",
             compset_alias="test_alias",
             grid_name="grid1",
@@ -1772,21 +1776,18 @@ class TestReferenceRunIngestion:
         db.add(sim)
         db.flush()
 
-        # Set reference_simulation_id on the case
-        assert sim.id is not None
-        case.reference_simulation_id = sim.id
-        db.commit()
-
         # Ingest archive containing the existing run plus a new one
         mock_simulations = {
             "/path/to/1081192.251218-200952": self._make_metadata(
                 execution_id="1081192.251218-200952",
                 simulation_start_date="2020-01-01",
+                case_hash="hash-A",
                 compiler="gcc-11",
             ),
             "/path/to/1081193.251218-200953": self._make_metadata(
                 execution_id="1081193.251218-200953",
                 simulation_start_date="2020-06-01",
+                case_hash="hash-A",
                 compiler="gcc-12",
             ),
         }
@@ -1858,10 +1859,6 @@ class TestReferenceRunIngestion:
         )
         db.add(sim)
         db.flush()
-
-        assert sim.id is not None
-        case.reference_simulation_id = sim.id
-        db.commit()
 
         mock_simulations = {
             "/path/to/1081193.251218-200953": self._make_metadata(
@@ -1953,10 +1950,6 @@ class TestReferenceRunIngestion:
         db.add(subgroup_baseline)
         db.flush()
 
-        assert case_reference.id is not None
-        case.reference_simulation_id = case_reference.id
-        db.commit()
-
         mock_simulations = {
             "/path/to/1081194.251218-200954": self._make_metadata(
                 execution_id="1081194.251218-200954",
@@ -2027,10 +2020,6 @@ class TestReferenceRunIngestion:
         )
         db.add(sim)
         db.flush()
-
-        assert sim.id is not None
-        case.reference_simulation_id = sim.id
-        db.commit()
 
         mock_simulations = {
             "/path/to/1081192.251218-200952": self._make_metadata(
@@ -2153,10 +2142,6 @@ class TestReferenceRunIngestion:
         db.add(subgroup_non_baseline)
         db.flush()
 
-        assert case_reference.id is not None
-        case.reference_simulation_id = case_reference.id
-        db.commit()
-
         mock_simulations = {
             "/path/to/1081194.251218-200954": self._make_metadata(
                 execution_id="1081194.251218-200954",
@@ -2215,6 +2200,7 @@ class TestReferenceRunIngestion:
         sim = Simulation(
             case_id=case.id,
             execution_id="1081194.251218-200953",
+            case_hash="hash-git",
             compset="FHIST",
             compset_alias="test_alias",
             grid_name="grid1",
@@ -2232,14 +2218,11 @@ class TestReferenceRunIngestion:
         db.add(sim)
         db.flush()
 
-        assert sim.id is not None
-        case.reference_simulation_id = sim.id
-        db.commit()
-
         mock_simulations = {
             "/path/to/1081194.251218-200956": self._make_metadata(
                 execution_id="1081194.251218-200956",
                 simulation_start_date="2020-06-01",
+                case_hash="hash-git",
                 git_repository_url="git@github.com:E3SM-Project/E3SM.git",
             ),
         }
@@ -2285,6 +2268,7 @@ class TestReferenceRunIngestion:
         sim = Simulation(
             case_id=case.id,
             execution_id="1081194.251218-200954",
+            case_hash="hash-sim-type",
             compset="FHIST",
             compset_alias="test_alias",
             grid_name="grid1",
@@ -2301,18 +2285,16 @@ class TestReferenceRunIngestion:
         db.add(sim)
         db.flush()
 
-        assert sim.id is not None
-        case.reference_simulation_id = sim.id
-        db.commit()
-
         mock_simulations = {
             "/path/to/1081194.251218-200954": self._make_metadata(
                 execution_id="1081194.251218-200954",
                 simulation_start_date="2020-01-01",
+                case_hash="hash-sim-type",
             ),
             "/path/to/1081194.251218-200955": self._make_metadata(
                 execution_id="1081194.251218-200955",
                 simulation_start_date="2020-06-01",
+                case_hash="hash-sim-type",
             ),
         }
 
@@ -2433,10 +2415,6 @@ class TestReferenceRunIngestion:
         db.add(sim)
         db.flush()
 
-        assert sim.id is not None
-        case.reference_simulation_id = sim.id
-        db.commit()
-
         mock_simulations = {
             "/path/to/1081193.251218-200953": self._make_metadata(
                 execution_id="1081193.251218-200953",
@@ -2552,13 +2530,9 @@ class TestIngestHelpers:
         assert updated.case_group == "groupA"
         mock_warning.assert_called_once()
 
-    def test_get_reference_metadata_caches_missing_persisted_reference(self) -> None:
+    def test_get_reference_metadata_for_case_returns_none(self) -> None:
         case = MagicMock(spec=Case)
         case.id = uuid4()
-        case.reference_simulation_id = uuid4()
-
-        db = MagicMock(spec=Session)
-        db.query.return_value.filter.return_value.first.return_value = None
 
         reference_cache: dict[str, SimulationConfigSnapshot] = {}
         persisted_reference_cache: dict[UUID, SimulationConfigSnapshot | None] = {}
@@ -2568,93 +2542,10 @@ class TestIngestHelpers:
             case_name="missing_reference_case",
             reference_cache=reference_cache,
             persisted_reference_cache=persisted_reference_cache,
-            db=db,
+            db=MagicMock(spec=Session),
         )
 
         assert result is None
-        assert case.id in persisted_reference_cache
-        assert persisted_reference_cache[case.id] is None
-
-    def test_get_reference_metadata_uses_persisted_cache_on_second_lookup(
-        self, db: Session
-    ) -> None:
-        machine = Machine(
-            name="cache-test-machine",
-            site="Test Site",
-            architecture="x86_64",
-            scheduler="SLURM",
-            gpu=False,
-        )
-        db.add(machine)
-
-        user = User(
-            email="cache-test@example.com",
-            is_active=True,
-            is_verified=True,
-        )
-        db.add(user)
-        db.commit()
-
-        ingestion = Ingestion(
-            source_type=IngestionSourceType.HPC_PATH,
-            source_reference="/archive",
-            status=IngestionStatus.SUCCESS,
-            machine_id=machine.id,
-            triggered_by=user.id,
-        )
-        db.add(ingestion)
-        db.commit()
-
-        case = Case(name="reference_cache_case")
-        db.add(case)
-        db.flush()
-
-        sim = Simulation(
-            case_id=case.id,
-            execution_id="1082000.260305-120000",
-            compset="FHIST",
-            compset_alias="test_alias",
-            grid_name="grid1",
-            grid_resolution="0.9x1.25",
-            machine_id=machine.id,
-            simulation_start_date=datetime(2020, 1, 1),
-            initialization_type="test",
-            status=SimulationStatus.CREATED,
-            simulation_type=SimulationType.UNKNOWN,
-            created_by=user.id,
-            last_updated_by=user.id,
-            ingestion_id=ingestion.id,
-            compiler="gcc-11",
-        )
-        db.add(sim)
-        db.flush()
-
-        assert sim.id is not None
-        case.reference_simulation_id = sim.id
-        db.commit()
-
-        reference_cache: dict[str, SimulationConfigSnapshot] = {}
-        persisted_reference_cache: dict[UUID, SimulationConfigSnapshot | None] = {}
-
-        first = _get_reference_metadata_for_case(
-            case=case,
-            case_name=case.name,
-            reference_cache=reference_cache,
-            persisted_reference_cache=persisted_reference_cache,
-            db=db,
-        )
-        assert first is not None
-        assert first.compiler == "gcc-11"
-
-        with patch.object(db, "query", side_effect=AssertionError):
-            second = _get_reference_metadata_for_case(
-                case=case,
-                case_name=case.name,
-                reference_cache=reference_cache,
-                persisted_reference_cache=persisted_reference_cache,
-                db=db,
-            )
-        assert second == first
 
     def test_get_known_case_hash_uses_persisted_cache_on_second_lookup(
         self,
@@ -2662,7 +2553,6 @@ class TestIngestHelpers:
         case = MagicMock(spec=Case)
         case.id = uuid4()
         case.name = "case_hash_cache_case"
-        case.reference_simulation_id = uuid4()
 
         db = MagicMock(spec=Session)
         case_hash_cache: dict[str, str] = {}
@@ -2730,7 +2620,7 @@ class TestIngestHelpers:
         assert case_hash_cache == {"case_hash_case": "matching-hash"}
         mock_info.assert_not_called()
 
-    def test_track_case_hash_grouping_uses_in_batch_hash_when_reference_hash_missing(
+    def test_track_case_hash_grouping_uses_in_batch_hash_when_persisted_hash_missing(
         self,
     ) -> None:
         first_parsed = ParsedSimulation(
@@ -2788,15 +2678,11 @@ class TestIngestHelpers:
         case = MagicMock(spec=Case)
         case.id = uuid4()
         case.name = "case_hash_case"
-        case.reference_simulation_id = uuid4()
-
-        reference_simulation = MagicMock(spec=Simulation)
-        reference_simulation.case_hash = None
 
         db = MagicMock(spec=Session)
-        db.query.return_value.filter.return_value.first.return_value = (
-            reference_simulation
-        )
+        (
+            db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.scalar.return_value
+        ) = None
 
         case_hash_cache: dict[str, str] = {}
         persisted_case_hash_cache: dict[UUID, str | None] = {}

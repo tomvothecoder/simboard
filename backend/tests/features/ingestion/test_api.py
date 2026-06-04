@@ -2062,10 +2062,9 @@ class TestIngestFromHpcUploadEndpoint:
 
 
 class TestIngestionApiCoverage:
-    def test_set_reference_simulations_skips_non_uuid_case_id(self):
-        """Covers defensive skip when a created simulation has a non-UUID case_id."""
+    def test_set_reference_simulations_is_now_a_no_op(self):
+        """Legacy helper should no-op after removing case-level reference semantics."""
         db = MagicMock(spec=Session)
-        db.query.return_value.filter.return_value.all.return_value = []
 
         sim = Simulation(case_id="not-a-uuid", id=uuid.uuid4())
 

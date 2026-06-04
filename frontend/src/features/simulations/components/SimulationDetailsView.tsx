@@ -14,6 +14,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { getAnchorChangeCount, getAnchorStatusLabel } from '@/features/simulations/caseUtils';
 import { SimulationPathCard } from '@/features/simulations/components/SimulationPathCard';
 import {
   SimulationSummaryLauncher,
@@ -133,6 +134,7 @@ export const SimulationDetailsView = ({
   const [activeTab, setActiveTab] = useState('summary');
   const [isAdvancedMetadataOpen, setIsAdvancedMetadataOpen] = useState(false);
   const [notes, setNotes] = useState(simulation.notesMarkdown || '');
+  const anchorChangeCount = getAnchorChangeCount(simulation);
   const performanceLinks = simulation.groupedLinks.performance ?? [];
   const outputArtifacts = getArtifactsByKind(
     simulation.artifacts,
@@ -273,12 +275,12 @@ export const SimulationDetailsView = ({
                         <ReadonlyInput value={simulation.caseGroup} />
                       </FieldRow>
                     )}
-                    <FieldRow label="Reference">
-                      <span className="text-sm">{simulation.isReference ? 'Yes' : 'No'}</span>
+                    <FieldRow label="Anchor">
+                      <span className="text-sm">{getAnchorStatusLabel(simulation)}</span>
                     </FieldRow>
-                    {!simulation.isReference && (
+                    {anchorChangeCount != null && (
                       <FieldRow label="Recorded config changes">
-                        <span className="text-sm">{simulation.changeCount}</span>
+                        <span className="text-sm">{anchorChangeCount}</span>
                       </FieldRow>
                     )}
                     <FieldRow label="Model Version">
@@ -336,7 +338,7 @@ export const SimulationDetailsView = ({
                 </Card>
               </div>
 
-              {!simulation.isReference && (
+              {anchorChangeCount != null && (
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base">Configuration Differences</CardTitle>
@@ -352,7 +354,7 @@ export const SimulationDetailsView = ({
                                 Field
                               </th>
                               <th className="p-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                Reference
+                                Anchor run
                               </th>
                               <th className="p-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                                 Current

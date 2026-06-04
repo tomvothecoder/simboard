@@ -9,6 +9,11 @@ from app.core.database import transaction
 from app.features.assistant.orchestrator import is_summary_llm_available
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
+from app.features.simulation.anchor import (
+    AnchorRunState,
+    resolve_anchor_run_state,
+    resolve_anchor_run_states,
+)
 from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
 from app.features.simulation.schemas import (
     CaseOut,
@@ -54,7 +59,7 @@ def list_cases(db: Session = Depends(get_database_session)) -> list[CaseOut]:
         .all()
     )
 
-    resp = [_case_to_out(c) for c in cases]
+    resp = [_case_to_out(db, c) for c in cases]
 
     return resp
 
@@ -124,12 +129,12 @@ def get_case(case_id: UUID, db: Session = Depends(get_database_session)) -> Case
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
 
-    resp = _case_to_out(case)
+    resp = _case_to_out(db, case)
 
     return resp
 
 
-def _case_to_out(case: Case) -> CaseOut:
+def _case_to_out(db: Session, case: Case) -> CaseOut:
     """Convert a Case ORM instance to CaseOut with nested SimulationSummaryOut.
 
     Parameters
@@ -157,8 +162,13 @@ def _case_to_out(case: Case) -> CaseOut:
         key=lambda username: username.lower(),
     )
 
+    anchor_states = resolve_anchor_run_states(db, case.simulations)
+
     for sim in case.simulations:
-        is_reference = sim.id == case.reference_simulation_id
+        anchor_state = anchor_states.get(
+            sim.id,
+            AnchorRunState(is_anchor_run=False, anchor_simulation_id=None),
+        )
         change_count = len(sim.run_config_deltas) if sim.run_config_deltas else 0
 
         summaries.append(
@@ -167,7 +177,8 @@ def _case_to_out(case: Case) -> CaseOut:
                 execution_id=sim.execution_id,
                 case_hash=sim.case_hash,
                 status=sim.status,
-                is_reference=is_reference,
+                is_anchor_run=anchor_state.is_anchor_run,
+                anchor_simulation_id=anchor_state.anchor_simulation_id,
                 change_count=change_count,
                 simulation_start_date=sim.simulation_start_date,
                 simulation_end_date=sim.simulation_end_date,
@@ -178,7 +189,6 @@ def _case_to_out(case: Case) -> CaseOut:
         id=case.id,
         name=case.name,
         case_group=case.case_group,
-        reference_simulation_id=case.reference_simulation_id,
         simulations=summaries,
         machine_names=machine_names,
         hpc_usernames=hpc_usernames,
@@ -260,11 +270,6 @@ def create_simulation(
         db.add(sim)
         db.flush()
 
-        if case.reference_simulation_id is None:
-            sim.run_config_deltas = None
-            case.reference_simulation_id = sim.id
-            db.add(case)
-
     # Re-query with relationships loaded
     sim_loaded = (
         db.query(Simulation)
@@ -284,7 +289,7 @@ def create_simulation(
             detail="Failed to load newly created simulation.",
         )
 
-    result = _simulation_to_out(sim_loaded)
+    result = _simulation_to_out(db, sim_loaded)
 
     return result
 
@@ -344,7 +349,8 @@ def list_simulations(
         query = query.filter(Simulation.case.has(case_group=case_group))
 
     sims = query.order_by(Simulation.created_at.desc()).all()
-    return [_simulation_to_out(s) for s in sims]
+    anchor_states = resolve_anchor_run_states(db, sims)
+    return [_simulation_to_out(db, s, anchor_states.get(s.id)) for s in sims]
 
 
 @simulation_router.get(
@@ -393,13 +399,17 @@ def get_simulation(sim_id: UUID, db: Session = Depends(get_database_session)):
     if not sim:
         raise HTTPException(status_code=404, detail="Simulation not found")
 
-    return _simulation_to_out(sim)
+    return _simulation_to_out(db, sim)
 
 
-def _simulation_to_out(sim: Simulation) -> SimulationOut:
+def _simulation_to_out(
+    db: Session,
+    sim: Simulation,
+    anchor_state: AnchorRunState | None = None,
+) -> SimulationOut:
     """Convert a Simulation ORM instance to a SimulationOut schema.
 
-    Derives ``case_name``, ``is_reference``, and ``change_count`` from
+    Derives ``case_name``, anchor metadata, and ``change_count`` from
     the associated Case relationship.
 
     Parameters
@@ -414,7 +424,7 @@ def _simulation_to_out(sim: Simulation) -> SimulationOut:
         fields.
     """
     case = sim.case
-    is_reference = sim.id == case.reference_simulation_id
+    resolved_anchor_state = anchor_state or resolve_anchor_run_state(db, sim)
     change_count = len(sim.run_config_deltas) if sim.run_config_deltas else 0
     llm_available = is_summary_llm_available()
 
@@ -423,7 +433,8 @@ def _simulation_to_out(sim: Simulation) -> SimulationOut:
             **{k: v for k, v in sim.__dict__.items() if not k.startswith("_")},
             "case_name": case.name,
             "case_group": case.case_group,
-            "is_reference": is_reference,
+            "is_anchor_run": resolved_anchor_state.is_anchor_run,
+            "anchor_simulation_id": resolved_anchor_state.anchor_simulation_id,
             "change_count": change_count,
             "summary_capabilities": SimulationSummaryCapabilitiesOut(
                 llm_available=llm_available,

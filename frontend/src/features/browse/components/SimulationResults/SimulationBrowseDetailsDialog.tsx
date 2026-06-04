@@ -10,6 +10,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { getBrowseAnchorStatusLabel } from '@/features/browse/components/SimulationResults/anchorStatus';
 import { suppressNextBrowseInteraction } from '@/features/browse/components/SimulationResults/selectionGuard';
 import { getArtifactsByKind } from '@/types/artifact';
 import type { SimulationOut } from '@/types/index';
@@ -146,14 +147,9 @@ export const SimulationBrowseDetailsDialog = ({
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                    Reference
+                    Anchor
                   </p>
-                  <p className="mt-1 text-sm text-slate-700">
-                    {simulation.isReference ? 'Yes' : 'No'}
-                    {!simulation.isReference && simulation.changeCount > 0
-                      ? ` (${simulation.changeCount} changes)`
-                      : ''}
-                  </p>
+                  <p className="mt-1 text-sm text-slate-700">{getBrowseAnchorStatusLabel(simulation)}</p>
                 </div>
               </div>
             </section>

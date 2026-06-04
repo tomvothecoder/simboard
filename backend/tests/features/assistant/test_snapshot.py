@@ -22,6 +22,9 @@ def _make_snapshot() -> SimulationSnapshot:
         simulation=SnapshotSimulationFields(
             id="simulation-1",
             execution_id="assistant-snapshot-exec",
+            case_hash="hash-1",
+            is_anchor_run=False,
+            anchor_simulation_id="anchor-1",
             description="Description " * 5,
             compset="AQUAPLANET",
             compset_alias="QPC4",

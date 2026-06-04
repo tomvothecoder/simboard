@@ -7,8 +7,10 @@ from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import object_session
 
 from app.core.config import settings
+from app.features.simulation.anchor import AnchorRunState, resolve_anchor_run_state
 from app.features.simulation.models import Artifact, ExternalLink, Simulation
 
 SNAPSHOT_TRUNCATED_CAVEAT = (
@@ -46,6 +48,9 @@ class SnapshotLink(BaseModel):
 class SnapshotSimulationFields(BaseModel):
     id: str
     execution_id: str
+    case_hash: str | None = None
+    is_anchor_run: bool = False
+    anchor_simulation_id: str | None = None
     description: str | None = None
     compset: str
     compset_alias: str
@@ -75,7 +80,6 @@ class SnapshotSimulationFields(BaseModel):
 class SnapshotCaseFields(BaseModel):
     name: str
     case_group: str | None = None
-    reference_simulation_id: str | None = None
 
 
 class SnapshotMachineFields(BaseModel):
@@ -201,12 +205,29 @@ def _apply_size_budget(
 def build_simulation_snapshot(
     simulation: Simulation,
     *,
+    anchor_state: AnchorRunState | None = None,
     max_chars: int | None = None,
 ) -> SimulationSnapshot:
+    resolved_anchor_state = anchor_state
+    if resolved_anchor_state is None:
+        session = object_session(simulation)
+        resolved_anchor_state = (
+            resolve_anchor_run_state(session, simulation)
+            if session is not None
+            else AnchorRunState(is_anchor_run=False, anchor_simulation_id=None)
+        )
+
     snapshot = SimulationSnapshot(
         simulation=SnapshotSimulationFields(
             id=str(simulation.id),
             execution_id=simulation.execution_id,
+            case_hash=simulation.case_hash,
+            is_anchor_run=resolved_anchor_state.is_anchor_run,
+            anchor_simulation_id=(
+                str(resolved_anchor_state.anchor_simulation_id)
+                if resolved_anchor_state.anchor_simulation_id
+                else None
+            ),
             description=simulation.description,
             compset=simulation.compset,
             compset_alias=simulation.compset_alias,
@@ -235,11 +256,6 @@ def build_simulation_snapshot(
         case=SnapshotCaseFields(
             name=simulation.case.name,
             case_group=simulation.case.case_group,
-            reference_simulation_id=(
-                str(simulation.case.reference_simulation_id)
-                if simulation.case.reference_simulation_id
-                else None
-            ),
         ),
         machine=(
             SnapshotMachineFields(name=simulation.machine.name)

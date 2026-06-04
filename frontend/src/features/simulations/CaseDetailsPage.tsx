@@ -21,7 +21,9 @@ import {
   formatCaseDate,
   formatCaseHashLabel,
   formatSimulationDateRange,
+  getAnchorStatusLabel,
   getDefaultExpandedGroupKeys,
+  getGroupChangeSummaryLabel,
   getSimulationSummaryDateWindow,
   groupSimulationSummaries,
   matchesSimulationGroupFilter,
@@ -241,7 +243,14 @@ export const CaseDetailsPage = ({
     [groupFilterMode, normalizedCaseHashQuery, sortedSimulationGroups],
   );
   const filteredFlatSimulations = useMemo(
-    () => filteredSimulationGroups.flatMap((group) => group.simulations),
+    () =>
+      filteredSimulationGroups
+        .flatMap((group) => group.simulations)
+        .sort(
+          (left, right) =>
+            new Date(right.summary.simulationStartDate).getTime() -
+            new Date(left.summary.simulationStartDate).getTime(),
+        ),
     [filteredSimulationGroups],
   );
   const visibleSimulationIds = useMemo(
@@ -710,11 +719,11 @@ export const CaseDetailsPage = ({
                                   className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
                                 >
                                   {summary.executionId}
-                                  {summary.isReference ? (
+                                  {summary.isAnchorRun ? (
                                     <span
                                       className="inline-flex items-center"
-                                      title="Reference simulation"
-                                      aria-label="Reference simulation"
+                                      title="Anchor run"
+                                      aria-label="Anchor run"
                                     >
                                       <Pin className="h-3.5 w-3.5 text-amber-600" />
                                     </span>
@@ -732,9 +741,7 @@ export const CaseDetailsPage = ({
                                 </span>
                               </TableCell>
                               <TableCell className="align-top text-sm text-slate-700">
-                                {summary.isReference
-                                  ? 'Reference baseline'
-                                  : `${summary.changeCount} changes`}
+                                {getAnchorStatusLabel(summary)}
                               </TableCell>
                               <TableCell className="align-top">
                                 <TableCellText
@@ -807,8 +814,8 @@ export const CaseDetailsPage = ({
                             const groupInitializationSummary = summarizeDistinctValues(
                               group.simulations.map(({ details }) => details?.initializationType),
                             );
-                            const maxChangeCount = Math.max(
-                              ...group.simulations.map(({ summary }) => summary.changeCount),
+                            const groupChangeSummaryLabel = getGroupChangeSummaryLabel(
+                              group.simulations.map(({ summary }) => summary),
                             );
                             const showInitializationColumn =
                               countDistinctValues(
@@ -879,7 +886,7 @@ export const CaseDetailsPage = ({
                                     <TableCellText value={groupInitializationSummary} lines={1} />
                                   </TableCell>
                                   <TableCell className="align-top text-sm font-medium text-slate-700">
-                                    Up to {maxChangeCount} changes
+                                    {groupChangeSummaryLabel}
                                   </TableCell>
                                   <TableCell className="align-top text-sm text-slate-700">
                                     {groupRunWindow}
@@ -959,11 +966,11 @@ export const CaseDetailsPage = ({
                                                         className="inline-flex items-center gap-1 font-mono text-xs text-blue-600 hover:underline"
                                                       >
                                                         {summary.executionId}
-                                                        {summary.isReference ? (
+                                                        {summary.isAnchorRun ? (
                                                           <span
                                                             className="inline-flex items-center"
-                                                            title="Reference simulation"
-                                                            aria-label="Reference simulation"
+                                                            title="Anchor run"
+                                                            aria-label="Anchor run"
                                                           >
                                                             <Pin className="h-3.5 w-3.5 text-amber-600" />
                                                           </span>
@@ -971,9 +978,7 @@ export const CaseDetailsPage = ({
                                                       </Link>
                                                     </TableCell>
                                                     <TableCell className="align-top text-sm text-slate-700">
-                                                      {summary.isReference
-                                                        ? 'Reference baseline'
-                                                        : `${summary.changeCount} changes`}
+                                                      {getAnchorStatusLabel(summary)}
                                                     </TableCell>
                                                     {showInitializationColumn ? (
                                                       <TableCell className="align-top">

@@ -19,6 +19,21 @@ export interface SimulationSummaryDateWindow {
   endDate: string | null;
 }
 
+interface AnchorStatusLike {
+  caseHash?: string | null;
+  isAnchorRun: boolean;
+  anchorSimulationId: string | null;
+  changeCount: number;
+}
+
+export const hasComparisonAnchor = (simulation: AnchorStatusLike) =>
+  simulation.caseHash != null &&
+  simulation.anchorSimulationId != null &&
+  !simulation.isAnchorRun;
+
+export const getAnchorChangeCount = (simulation: AnchorStatusLike) =>
+  hasComparisonAnchor(simulation) ? simulation.changeCount : null;
+
 export const formatCaseDate = (value?: string | null) => {
   if (!value) return '—';
 
@@ -71,16 +86,46 @@ export const getSimulationSummaryDateWindow = (
 
 export const sortSimulationSummaries = (simulations: SimulationSummaryOut[]) =>
   [...simulations].sort((left, right) => {
-    if (left.isReference !== right.isReference) {
-      return left.isReference ? -1 : 1;
-    }
-
     return (
       new Date(right.simulationStartDate).getTime() - new Date(left.simulationStartDate).getTime()
     );
   });
 
-export const formatCaseHashLabel = (caseHash: string | null, maxLength = 18) => {
+export const getAnchorStatusLabel = (simulation: AnchorStatusLike) => {
+  if (simulation.anchorSimulationId == null) {
+    return 'No comparison anchor';
+  }
+
+  if (simulation.isAnchorRun) {
+    return 'Anchor run';
+  }
+
+  const comparisonChangeCount = getAnchorChangeCount(simulation);
+
+  if (comparisonChangeCount == null) {
+    return 'No comparison anchor';
+  }
+
+  if (comparisonChangeCount > 0) {
+    return `${comparisonChangeCount} changes from anchor run`;
+  }
+
+  return 'No recorded changes from anchor run';
+};
+
+export const getGroupChangeSummaryLabel = (simulations: AnchorStatusLike[]) => {
+  const changeCounts = simulations
+    .map((simulation) => getAnchorChangeCount(simulation))
+    .filter((value): value is number => value != null);
+
+  if (changeCounts.length === 0) {
+    return 'No comparison anchor';
+  }
+
+  return `Up to ${Math.max(...changeCounts)} changes`;
+};
+
+export const formatCaseHashLabel = (caseHash: string | null | undefined, maxLength = 18) => {
   if (!caseHash) return MISSING_CASE_HASH_LABEL;
   if (caseHash.length <= maxLength) return caseHash;
 
@@ -146,7 +191,16 @@ export const groupSimulationSummaries = (
       caseHash: group.caseHash,
       label: group.label,
       isFallback: group.isFallback,
-      simulations: group.simulations,
+      simulations: [...group.simulations].sort((left, right) => {
+        if (!group.isFallback && left.isAnchorRun !== right.isAnchorRun) {
+          return left.isAnchorRun ? -1 : 1;
+        }
+
+        return (
+          new Date(right.simulationStartDate).getTime() -
+          new Date(left.simulationStartDate).getTime()
+        );
+      }),
     }));
 };
 

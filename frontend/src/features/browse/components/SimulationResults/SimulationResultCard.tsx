@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { TableCellText } from '@/components/ui/table-cell-text';
+import { getBrowseAnchorStatusLabel } from '@/features/browse/components/SimulationResults/anchorStatus';
 import { SimulationBrowseDetailsDialog } from '@/features/browse/components/SimulationResults/SimulationBrowseDetailsDialog';
 import type { SimulationOut } from '@/types/index';
 
@@ -178,12 +179,7 @@ export const SimulationResultCard = ({
                 variant="secondary"
                 className="flex items-center gap-1 border border-slate-200 bg-slate-50 px-2 py-1 text-sm text-slate-700"
               >
-                Reference: {simulation.isReference ? 'Yes' : 'No'}
-                {!simulation.isReference && simulation.changeCount > 0 && (
-                  <span className="ml-1 text-xs text-muted-foreground">
-                    (Changes: {simulation.changeCount})
-                  </span>
-                )}
+                {getBrowseAnchorStatusLabel(simulation)}
               </Badge>
               <Badge
                 className={`text-xs px-2 py-1 ${

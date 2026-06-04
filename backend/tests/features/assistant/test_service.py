@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -29,7 +30,7 @@ def _create_simulation(
     *,
     case_name: str = "assistant_case",
     execution_id: str = "assistant-exec-1",
-    is_reference: bool = True,
+    is_anchor_run: bool = True,
     with_diagnostics: bool = True,
     with_optional_metadata: bool = True,
 ) -> Simulation:
@@ -51,9 +52,33 @@ def _create_simulation(
     db.add(ingestion)
     db.flush()
 
+    if not is_anchor_run:
+        anchor = Simulation(
+            case_id=case.id,
+            execution_id=f"{execution_id}-ref",
+            case_hash="assistant-hash-1",
+            compset="AQUAPLANET",
+            compset_alias="QPC4",
+            grid_name="f19_f19",
+            grid_resolution="1.9x2.5",
+            simulation_type="experimental",
+            status="completed",
+            initialization_type="startup",
+            machine_id=machine.id,
+            simulation_start_date="2023-01-01T00:00:00Z",
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            ingestion_id=ingestion.id,
+            created_at=datetime(2023, 1, 1, 0, 0, 0),
+            updated_at=datetime(2023, 1, 1, 0, 0, 0),
+        )
+        db.add(anchor)
+        db.flush()
+
     simulation = Simulation(
         case_id=case.id,
         execution_id=execution_id,
+        case_hash="assistant-hash-1",
         description="Control simulation for deterministic summary."
         if with_optional_metadata
         else None,
@@ -83,37 +108,16 @@ def _create_simulation(
         created_by=normal_user_sync["id"],
         last_updated_by=admin_user_sync["id"],
         ingestion_id=ingestion.id,
+        created_at=datetime(2023, 1, 2, 0, 0, 0),
+        updated_at=datetime(2023, 1, 2, 0, 0, 0),
         run_config_deltas=(
             None
-            if is_reference
+            if is_anchor_run
             else {"compiler": {"reference": "gcc-11", "current": "gcc-12"}}
         ),
     )
     db.add(simulation)
     db.flush()
-
-    if is_reference:
-        case.reference_simulation_id = simulation.id
-    else:
-        reference = Simulation(
-            case_id=case.id,
-            execution_id=f"{execution_id}-ref",
-            compset="AQUAPLANET",
-            compset_alias="QPC4",
-            grid_name="f19_f19",
-            grid_resolution="1.9x2.5",
-            simulation_type="experimental",
-            status="completed",
-            initialization_type="startup",
-            machine_id=machine.id,
-            simulation_start_date="2023-01-01T00:00:00Z",
-            created_by=normal_user_sync["id"],
-            last_updated_by=admin_user_sync["id"],
-            ingestion_id=ingestion.id,
-        )
-        db.add(reference)
-        db.flush()
-        case.reference_simulation_id = reference.id
 
     if with_diagnostics:
         db.add(
@@ -202,13 +206,13 @@ class TestBuildSimulationSummary:
             normal_user_sync,
             admin_user_sync,
             execution_id="assistant-nonref",
-            is_reference=False,
+            is_anchor_run=False,
         )
 
         summary = build_simulation_summary(simulation)
 
         assert (
-            "non-reference run with 1 recorded configuration change(s)"
+            "run with 1 recorded configuration change(s) from its comparison anchor"
             in summary.answer
         )
         assert "simulation.run_config_deltas" in {
@@ -237,12 +241,15 @@ class TestBuildSimulationSummary:
             "This summary uses only metadata already stored in SimBoard. It does not use retrieval, diagnostics interpretation, or LLM reasoning."
         ]
 
-    def test_non_reference_without_deltas_adds_explicit_caveat(self) -> None:
+    def test_non_anchor_without_deltas_adds_explicit_caveat(self) -> None:
         summary = build_simulation_summary(
             SimulationSnapshot(
                 simulation=SnapshotSimulationFields(
                     id="simulation-1",
                     execution_id="assistant-nonref-no-deltas",
+                    case_hash="hash-1",
+                    is_anchor_run=False,
+                    anchor_simulation_id="anchor-1",
                     compset="AQUAPLANET",
                     compset_alias="QPC4",
                     grid_name="f19_f19",
@@ -252,21 +259,38 @@ class TestBuildSimulationSummary:
                     initialization_type="startup",
                     simulation_start_date="2023-01-01T00:00:00Z",
                 ),
-                case=SnapshotCaseFields(
-                    name="assistant_case",
-                    reference_simulation_id="reference-1",
-                ),
+                case=SnapshotCaseFields(name="assistant_case"),
             )
         )
 
         assert (
-            "It is a non-reference run with no recorded configuration differences."
+            "It has no recorded configuration differences from its comparison anchor."
             in summary.answer
         )
         assert (
-            "This non-reference simulation has no recorded configuration differences in SimBoard metadata."
+            "This simulation has no recorded configuration differences from its comparison anchor in SimBoard metadata."
             in summary.caveats
         )
+
+    def test_hashless_legacy_run_mentions_missing_anchor(self) -> None:
+        summary = build_simulation_summary(
+            SimulationSnapshot(
+                simulation=SnapshotSimulationFields(
+                    id="simulation-legacy",
+                    execution_id="assistant-legacy",
+                    compset="AQUAPLANET",
+                    compset_alias="QPC4",
+                    grid_name="f19_f19",
+                    grid_resolution="1.9x2.5",
+                    simulation_type="experimental",
+                    status="completed",
+                    initialization_type="startup",
+                ),
+                case=SnapshotCaseFields(name="assistant_case"),
+            )
+        )
+
+        assert "legacy run without a comparison anchor" in summary.answer
 
     def test_missing_start_date_adds_caveat_and_default_followup(self) -> None:
         summary = build_simulation_summary(

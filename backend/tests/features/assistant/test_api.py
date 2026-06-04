@@ -69,6 +69,7 @@ async def _create_simulation(
     simulation = Simulation(
         case_id=case.id,
         execution_id=execution_id,
+        case_hash="assistant-api-hash-1",
         compset="AQUAPLANET",
         compset_alias="QPC4",
         grid_name="f19_f19",
@@ -85,7 +86,6 @@ async def _create_simulation(
     )
     db.add(simulation)
     await db.flush()
-    case.reference_simulation_id = simulation.id
     await db.commit()
     await db.refresh(simulation)
     return simulation

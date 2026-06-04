@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
 import { BrowseToolbar } from '@/features/browse/components/BrowseToolbar';
+import { getBrowseAnchorStatusLabel } from '@/features/browse/components/SimulationResults/anchorStatus';
 import { SimulationBrowseDetailsDialog } from '@/features/browse/components/SimulationResults/SimulationBrowseDetailsDialog';
 import type { SimulationOut } from '@/types/index';
 
@@ -147,22 +148,11 @@ const columns: ColumnDef<SimulationOut>[] = [
     meta: { width: 220 },
   },
   {
-    accessorKey: 'isReference',
-    header: renderSortableHeader('Reference'),
-    cell: ({ row }) => {
-      const isReference = row.original.isReference;
-      const changeCount = row.original.changeCount;
-      return (
-        <div>
-          {isReference ? 'Yes' : 'No'}
-          {!isReference && changeCount > 0 && (
-            <span className="ml-1 text-slate-400">({changeCount})</span>
-          )}
-        </div>
-      );
-    },
+    accessorKey: 'anchorSimulationId',
+    header: renderSortableHeader('Anchor'),
+    cell: ({ row }) => <div>{getBrowseAnchorStatusLabel(row.original)}</div>,
     enableSorting: true,
-    meta: { width: 110 },
+    meta: { width: 240 },
   },
   {
     accessorKey: 'campaign',
