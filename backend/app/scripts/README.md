@@ -13,7 +13,7 @@ Scripts are organized by domain:
 ```
 scripts/
 ├── ingestion/
-│   ├── hpc_archive_upload_ingestor.py
+│   ├── hpc_upload_archive_ingestor.py
 │   ├── nersc_archive_ingestor.py
 │   └── sites/
 │       └── chrysalis.sh
@@ -44,7 +44,7 @@ Example:
 python -m app.scripts.db.seed
 python -m app.scripts.db.rollback_seed
 python -m app.scripts.users.create_admin_account
-python -m app.scripts.ingestion.hpc_archive_ingestor
+python -m app.scripts.ingestion.hpc_upload_archive_ingestor
 python -m app.scripts.ingestion.nersc_archive_ingestor --dry-run
 ```
 
