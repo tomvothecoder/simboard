@@ -57,7 +57,7 @@ class TestUserManager:
         )
 
     @pytest.mark.asyncio
-    async def test_refresh_membership_does_not_overwrite_non_user_role(self):
+    async def test_refresh_membership_persists_verified_state_for_admin(self):
         checked_at = datetime.now(timezone.utc)
         user = User(
             id=uuid.uuid4(),
@@ -278,7 +278,7 @@ class TestCanEditManagedContent:
         user.has_verified_e3sm_membership = False
         assert can_edit_managed_content(user) is False
 
-    def test_service_account_denied_without_membership(self):
+    def test_unverified_user_and_service_account_are_denied(self):
         assert (
             can_edit_managed_content(
                 User(

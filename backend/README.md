@@ -47,5 +47,5 @@ For repo-wide setup, assistant LLM configuration, and contributor workflow, see 
 
 - Authenticated read access to simulations remains broad.
 - Managed content edits must reuse `app.features.user.manager.can_edit_managed_content`.
-- Policy shape: `admin` always allowed, `editor` allowed only with verified E3SM GitHub org membership, `user` denied, `service_account` denied for human UI-managed edits.
+- Policy shape: `admin` always allowed, `user` allowed only with verified E3SM GitHub org membership, `service_account` denied for human UI-managed edits.
 - Routes that enforce this policy should preserve `401` for unauthenticated requests and return `403` for authenticated users who lack edit permission.
