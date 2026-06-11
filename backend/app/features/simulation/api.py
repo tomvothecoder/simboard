@@ -292,7 +292,7 @@ def update_simulation(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
-                "Editing simulation metadata requires SimBoard editor access and "
+                "Editing simulation metadata requires SimBoard admin access or "
                 "verified E3SM GitHub organization membership."
             ),
         )

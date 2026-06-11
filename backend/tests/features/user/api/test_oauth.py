@@ -260,6 +260,51 @@ class TestAuthRoutes:
         user_manager.refresh_github_org_membership.assert_awaited_once()
         user_manager.on_after_login.assert_awaited_once_with(user, ANY, response)
 
+    async def test_github_oauth_callback_uses_refreshed_user_for_login(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            oauth.GITHUB_OAUTH_CLIENT,
+            "get_id_email",
+            AsyncMock(return_value=("mock_account_id", "mockuser@example.com")),
+        )
+        monkeypatch.setattr(oauth, "decode_jwt", lambda *_args, **_kwargs: {})
+        monkeypatch.setattr(
+            oauth,
+            "_fetch_verified_e3sm_membership",
+            AsyncMock(return_value=True),
+        )
+        login_mock = AsyncMock(return_value=RedirectResponse("/", status_code=302))
+        monkeypatch.setattr(oauth.GITHUB_OAUTH_BACKEND, "login", login_mock)
+        original_user = SimpleNamespace(is_active=True, role=UserRole.USER)
+        refreshed_user = SimpleNamespace(
+            is_active=True,
+            role=UserRole.USER,
+            has_verified_e3sm_membership=True,
+        )
+        user_manager = SimpleNamespace(
+            oauth_callback=AsyncMock(return_value=original_user),
+            refresh_github_org_membership=AsyncMock(return_value=refreshed_user),
+            on_after_login=AsyncMock(),
+        )
+
+        response = await oauth.github_callback(
+            Request({"type": "http", "headers": []}),
+            access_token_state=({"access_token": "fake_token"}, "valid-state"),
+            user_manager=user_manager,
+            strategy=object(),
+        )
+
+        user_manager.refresh_github_org_membership.assert_awaited_once_with(
+            original_user,
+            is_verified_member=True,
+            checked_at=ANY,
+        )
+        login_mock.assert_awaited_once_with(ANY, refreshed_user)
+        user_manager.on_after_login.assert_awaited_once_with(
+            refreshed_user, ANY, response
+        )
+
     async def test_fetch_verified_e3sm_membership_active_member(self) -> None:
         response = SimpleNamespace(status_code=200, json=lambda: {"state": "active"})
         client = AsyncMock()
@@ -288,6 +333,20 @@ class TestAuthRoutes:
         self,
     ) -> None:
         failed_response = SimpleNamespace(status_code=503, json=lambda: {})
+        client = AsyncMock()
+        client.__aenter__.return_value = client
+        client.__aexit__.return_value = None
+        client.get.return_value = failed_response
+
+        with patch.object(oauth, "AsyncClient", return_value=client):
+            result = await oauth._fetch_verified_e3sm_membership("token")
+
+        assert result is None
+
+    async def test_fetch_verified_e3sm_membership_client_error_returns_none(
+        self,
+    ) -> None:
+        failed_response = SimpleNamespace(status_code=403, json=lambda: {})
         client = AsyncMock()
         client.__aenter__.return_value = client
         client.__aexit__.return_value = None

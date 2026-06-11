@@ -17,7 +17,7 @@ class UserRead(schemas.BaseUser[UUID]):
     @property
     def can_edit_managed_content(self) -> bool:
         return self.role == UserRole.ADMIN.value or (
-            self.role == UserRole.EDITOR.value and self.has_verified_e3sm_membership
+            self.role == UserRole.USER.value and self.has_verified_e3sm_membership
         )
 
 

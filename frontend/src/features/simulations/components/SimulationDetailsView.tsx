@@ -697,10 +697,7 @@ export const SimulationDetailsView = ({
       ),
     ),
     links: linkRows.map((_, index) =>
-      mergeRowFieldErrors(
-        clientRowErrors.links[index] ?? {},
-        serverRowErrors.links[index] ?? {},
-      ),
+      mergeRowFieldErrors(clientRowErrors.links[index] ?? {}, serverRowErrors.links[index] ?? {}),
     ),
   };
   const hasClientResourceErrors = hasAnyRowErrors(clientRowErrors);
@@ -758,7 +755,7 @@ export const SimulationDetailsView = ({
     ? `Compare list is full. Remove one of the ${maxCompareSelection} selected runs first.`
     : undefined;
   const editAccessMessage = isAuthenticated
-    ? 'Read-only. Editing requires SimBoard editor access and verified E3SM GitHub organization membership.'
+    ? 'Read-only. Editing requires SimBoard admin access or verified E3SM GitHub organization membership.'
     : 'Log in with GitHub to edit simulation metadata.';
 
   const addComment = () => {
@@ -1573,7 +1570,7 @@ export const SimulationDetailsView = ({
                   {!canEdit && (
                     <p className="text-xs text-muted-foreground">
                       {isAuthenticated
-                        ? 'You are signed in, but this simulation is read-only. Editing requires SimBoard editor access and verified E3SM GitHub organization membership.'
+                        ? 'You are signed in, but this simulation is read-only. Editing requires SimBoard admin access or verified E3SM GitHub organization membership.'
                         : 'Log in with GitHub to edit simulation metadata. This page stays read-only while signed out.'}
                     </p>
                   )}

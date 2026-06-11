@@ -16,7 +16,6 @@ from app.common.models.base import Base
 
 class UserRole(str, Enum):
     ADMIN = "admin"
-    EDITOR = "editor"
     USER = "user"
     SERVICE_ACCOUNT = "service_account"
 

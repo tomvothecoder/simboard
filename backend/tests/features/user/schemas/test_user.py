@@ -32,14 +32,14 @@ class TestUserRead:
         assert not user.has_verified_e3sm_membership
         assert not user.can_edit_managed_content
 
-    def test_editor_membership_enables_edit_capability(self) -> None:
+    def test_verified_membership_enables_edit_capability(self) -> None:
         user = UserRead(
             id=uuid.uuid4(),
-            email="editor@example.com",
+            email="user@example.com",
             is_active=True,
             is_superuser=False,
             is_verified=True,
-            role="editor",
+            role="user",
             has_verified_e3sm_membership=True,
         )
 

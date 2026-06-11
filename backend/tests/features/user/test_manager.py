@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -28,6 +29,81 @@ class TestUserManager:
         # Assert
         mock_logger.assert_called_once_with(
             "✅ New GitHub user registered: testuser@example.com"
+        )
+
+    @pytest.mark.asyncio
+    async def test_refresh_membership_persists_verified_state(self):
+        checked_at = datetime.now(timezone.utc)
+        user = User(
+            id=uuid.uuid4(),
+            email="testuser@example.com",
+            role=UserRole.USER,
+        )
+        user_db = AsyncMock()
+        user_manager = UserManager(user_db=user_db)
+
+        await user_manager.refresh_github_org_membership(
+            user,
+            is_verified_member=True,
+            checked_at=checked_at,
+        )
+
+        user_db.update.assert_awaited_once_with(
+            user,
+            {
+                "has_verified_e3sm_membership": True,
+                "github_org_membership_checked_at": checked_at,
+            },
+        )
+
+    @pytest.mark.asyncio
+    async def test_refresh_membership_does_not_overwrite_non_user_role(self):
+        checked_at = datetime.now(timezone.utc)
+        user = User(
+            id=uuid.uuid4(),
+            email="admin@example.com",
+            role=UserRole.ADMIN,
+        )
+        user_db = AsyncMock()
+        user_manager = UserManager(user_db=user_db)
+
+        await user_manager.refresh_github_org_membership(
+            user,
+            is_verified_member=True,
+            checked_at=checked_at,
+        )
+
+        user_db.update.assert_awaited_once_with(
+            user,
+            {
+                "has_verified_e3sm_membership": True,
+                "github_org_membership_checked_at": checked_at,
+            },
+        )
+
+    @pytest.mark.asyncio
+    async def test_refresh_membership_persists_unverified_state(self):
+        checked_at = datetime.now(timezone.utc)
+        user = User(
+            id=uuid.uuid4(),
+            email="user@example.com",
+            role=UserRole.USER,
+        )
+        user_db = AsyncMock()
+        user_manager = UserManager(user_db=user_db)
+
+        await user_manager.refresh_github_org_membership(
+            user,
+            is_verified_member=False,
+            checked_at=checked_at,
+        )
+
+        user_db.update.assert_awaited_once_with(
+            user,
+            {
+                "has_verified_e3sm_membership": False,
+                "github_org_membership_checked_at": checked_at,
+            },
         )
 
 
@@ -177,6 +253,9 @@ class TestOptionalCurrentUser:
 
 
 class TestCanEditManagedContent:
+    def test_none_user_denied(self):
+        assert can_edit_managed_content(None) is False
+
     def test_admin_allowed_without_org_membership(self):
         user = User(
             id=uuid.uuid4(),
@@ -187,11 +266,11 @@ class TestCanEditManagedContent:
 
         assert can_edit_managed_content(user) is True
 
-    def test_editor_requires_verified_membership(self):
+    def test_verified_membership_enables_edit_capability(self):
         user = User(
             id=uuid.uuid4(),
-            email="editor@example.com",
-            role=UserRole.EDITOR,
+            email="user@example.com",
+            role=UserRole.USER,
             has_verified_e3sm_membership=True,
         )
 
@@ -199,14 +278,14 @@ class TestCanEditManagedContent:
         user.has_verified_e3sm_membership = False
         assert can_edit_managed_content(user) is False
 
-    def test_user_and_service_account_denied(self):
+    def test_service_account_denied_without_membership(self):
         assert (
             can_edit_managed_content(
                 User(
                     id=uuid.uuid4(),
                     email="user@example.com",
                     role=UserRole.USER,
-                    has_verified_e3sm_membership=True,
+                    has_verified_e3sm_membership=False,
                 )
             )
             is False

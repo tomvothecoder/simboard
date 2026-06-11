@@ -122,7 +122,7 @@ def can_edit_managed_content(user: User | None) -> bool:
     if user.role == UserRole.ADMIN:
         return True
 
-    return user.role == UserRole.EDITOR and user.has_verified_e3sm_membership
+    return user.role == UserRole.USER and user.has_verified_e3sm_membership
 
 
 def _resolve_api_token_user(

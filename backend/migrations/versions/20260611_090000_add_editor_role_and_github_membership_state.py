@@ -1,4 +1,4 @@
-"""Add editor role and persisted GitHub org membership state to users.
+"""Persist GitHub org membership state used for edit authorization.
 
 Revision ID: 20260611_090000
 Revises: 20260604_120000
@@ -19,7 +19,6 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Persist edit-authorization inputs on users."""
-    op.execute("ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'EDITOR'")
     op.add_column(
         "users",
         sa.Column(

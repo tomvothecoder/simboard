@@ -31,7 +31,7 @@ def override_auth_dependency(normal_user_sync):
             email=normal_user_sync["email"],
             is_active=True,
             is_verified=True,
-            role=UserRole.EDITOR,
+            role=UserRole.USER,
             has_verified_e3sm_membership=True,
         )
 
@@ -1368,7 +1368,7 @@ class TestUpdateSimulation:
             email="reload-fail@example.com",
             is_active=True,
             is_verified=True,
-            role=UserRole.EDITOR,
+            role=UserRole.USER,
             has_verified_e3sm_membership=True,
         )
 
