@@ -86,6 +86,11 @@ class TestAuthRoutes:
         """Mock GitHub OAuth token + profile exchange (FastAPI-Users v14)."""
         with (
             patch.object(
+                oauth,
+                "_fetch_verified_e3sm_membership",
+                new=AsyncMock(return_value=False),
+            ),
+            patch.object(
                 oauth.GITHUB_OAUTH_CLIENT,
                 "get_access_token",
                 new=AsyncMock(return_value={"access_token": "fake_token"}),
@@ -107,6 +112,11 @@ class TestAuthRoutes:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
+            oauth,
+            "_fetch_verified_e3sm_membership",
+            AsyncMock(return_value=False),
+        )
+        monkeypatch.setattr(
             oauth.GITHUB_OAUTH_CLIENT,
             "get_id_email",
             AsyncMock(return_value=("mock_account_id", None)),
@@ -127,6 +137,11 @@ class TestAuthRoutes:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
+            oauth,
+            "_fetch_verified_e3sm_membership",
+            AsyncMock(return_value=False),
+        )
+        monkeypatch.setattr(
             oauth.GITHUB_OAUTH_CLIENT,
             "get_id_email",
             AsyncMock(return_value=("mock_account_id", "mockuser@example.com")),
@@ -145,6 +160,11 @@ class TestAuthRoutes:
     async def test_github_oauth_callback_rejects_existing_user_conflict(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        monkeypatch.setattr(
+            oauth,
+            "_fetch_verified_e3sm_membership",
+            AsyncMock(return_value=False),
+        )
         monkeypatch.setattr(
             oauth.GITHUB_OAUTH_CLIENT,
             "get_id_email",
@@ -170,6 +190,11 @@ class TestAuthRoutes:
     async def test_github_oauth_callback_rejects_inactive_user(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        monkeypatch.setattr(
+            oauth,
+            "_fetch_verified_e3sm_membership",
+            AsyncMock(return_value=False),
+        )
         monkeypatch.setattr(
             oauth.GITHUB_OAUTH_CLIENT,
             "get_id_email",
@@ -205,6 +230,11 @@ class TestAuthRoutes:
             oauth, "decode_jwt", lambda *_args, **_kwargs: {"return_to": return_to}
         )
         monkeypatch.setattr(
+            oauth,
+            "_fetch_verified_e3sm_membership",
+            AsyncMock(return_value=True),
+        )
+        monkeypatch.setattr(
             oauth.GITHUB_OAUTH_BACKEND,
             "login",
             AsyncMock(return_value=RedirectResponse("/", status_code=302)),
@@ -212,6 +242,7 @@ class TestAuthRoutes:
         user = SimpleNamespace(is_active=True)
         user_manager = SimpleNamespace(
             oauth_callback=AsyncMock(return_value=user),
+            refresh_github_org_membership=AsyncMock(return_value=user),
             on_after_login=AsyncMock(),
         )
 
@@ -226,7 +257,82 @@ class TestAuthRoutes:
         assert response.headers["location"].endswith(
             "auth/callback?return_to=https%3A%2F%2F127.0.0.1%3A5173%2Fsimulations%2Ftest-run%3Ftab%3Dsummary"
         )
+        user_manager.refresh_github_org_membership.assert_awaited_once()
         user_manager.on_after_login.assert_awaited_once_with(user, ANY, response)
+
+    async def test_fetch_verified_e3sm_membership_active_member(self) -> None:
+        response = SimpleNamespace(status_code=200, json=lambda: {"state": "active"})
+        client = AsyncMock()
+        client.__aenter__.return_value = client
+        client.__aexit__.return_value = None
+        client.get.return_value = response
+
+        with patch.object(oauth, "AsyncClient", return_value=client):
+            result = await oauth._fetch_verified_e3sm_membership("token")
+
+        assert result is True
+
+    async def test_fetch_verified_e3sm_membership_non_member(self) -> None:
+        missing_response = SimpleNamespace(status_code=404, json=lambda: {})
+        client = AsyncMock()
+        client.__aenter__.return_value = client
+        client.__aexit__.return_value = None
+        client.get.return_value = missing_response
+
+        with patch.object(oauth, "AsyncClient", return_value=client):
+            missing_result = await oauth._fetch_verified_e3sm_membership("token")
+
+        assert missing_result is False
+
+    async def test_fetch_verified_e3sm_membership_preserves_state_on_api_failure(
+        self,
+    ) -> None:
+        failed_response = SimpleNamespace(status_code=503, json=lambda: {})
+        client = AsyncMock()
+        client.__aenter__.return_value = client
+        client.__aexit__.return_value = None
+        client.get.return_value = failed_response
+
+        with patch.object(oauth, "AsyncClient", return_value=client):
+            result = await oauth._fetch_verified_e3sm_membership("token")
+
+        assert result is None
+
+    async def test_github_oauth_callback_does_not_downgrade_membership_on_api_failure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            oauth.GITHUB_OAUTH_CLIENT,
+            "get_id_email",
+            AsyncMock(return_value=("mock_account_id", "mockuser@example.com")),
+        )
+        monkeypatch.setattr(oauth, "decode_jwt", lambda *_args, **_kwargs: {})
+        monkeypatch.setattr(
+            oauth,
+            "_fetch_verified_e3sm_membership",
+            AsyncMock(return_value=None),
+        )
+        monkeypatch.setattr(
+            oauth.GITHUB_OAUTH_BACKEND,
+            "login",
+            AsyncMock(return_value=RedirectResponse("/", status_code=302)),
+        )
+        user = SimpleNamespace(is_active=True)
+        user_manager = SimpleNamespace(
+            oauth_callback=AsyncMock(return_value=user),
+            refresh_github_org_membership=AsyncMock(return_value=user),
+            on_after_login=AsyncMock(),
+        )
+
+        response = await oauth.github_callback(
+            Request({"type": "http", "headers": []}),
+            access_token_state=({"access_token": "fake_token"}, "valid-state"),
+            user_manager=user_manager,
+            strategy=object(),
+        )
+
+        assert response.status_code == status.HTTP_302_FOUND
+        user_manager.refresh_github_org_membership.assert_not_awaited()
 
 
 class TestLogOutRoute:
@@ -293,6 +399,7 @@ class TestUserRoutes:
                 "is_active": True,
                 "is_verified": True,
                 "role": UserRole.USER.value,
+                "has_verified_e3sm_membership": False,
             }
 
         override_dependency(f"{API_BASE}/users/me", "current_user", override_user)
@@ -304,3 +411,4 @@ class TestUserRoutes:
         data = response.json()
         assert set(data.keys()) >= {"id", "email", "is_active", "is_verified", "role"}
         assert data["email"] == normal_user["email"]
+        assert data["can_edit_managed_content"] is False

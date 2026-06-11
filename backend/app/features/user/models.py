@@ -16,6 +16,7 @@ from app.common.models.base import Base
 
 class UserRole(str, Enum):
     ADMIN = "admin"
+    EDITOR = "editor"
     USER = "user"
     SERVICE_ACCOUNT = "service_account"
 
@@ -34,6 +35,12 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         SQLEnum(UserRole, name="user_role"),
         nullable=False,
         default=UserRole.USER,
+    )
+    has_verified_e3sm_membership: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    github_org_membership_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     # Relationship to linked OAuth accounts

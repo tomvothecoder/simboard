@@ -6,6 +6,7 @@ from fastapi import HTTPException
 
 from app.features.user.manager import (
     UserManager,
+    can_edit_managed_content,
     current_active_user,
     optional_current_user,
 )
@@ -173,3 +174,51 @@ class TestOptionalCurrentUser:
             )
 
         assert result is expected_user
+
+
+class TestCanEditManagedContent:
+    def test_admin_allowed_without_org_membership(self):
+        user = User(
+            id=uuid.uuid4(),
+            email="admin@example.com",
+            role=UserRole.ADMIN,
+            has_verified_e3sm_membership=False,
+        )
+
+        assert can_edit_managed_content(user) is True
+
+    def test_editor_requires_verified_membership(self):
+        user = User(
+            id=uuid.uuid4(),
+            email="editor@example.com",
+            role=UserRole.EDITOR,
+            has_verified_e3sm_membership=True,
+        )
+
+        assert can_edit_managed_content(user) is True
+        user.has_verified_e3sm_membership = False
+        assert can_edit_managed_content(user) is False
+
+    def test_user_and_service_account_denied(self):
+        assert (
+            can_edit_managed_content(
+                User(
+                    id=uuid.uuid4(),
+                    email="user@example.com",
+                    role=UserRole.USER,
+                    has_verified_e3sm_membership=True,
+                )
+            )
+            is False
+        )
+        assert (
+            can_edit_managed_content(
+                User(
+                    id=uuid.uuid4(),
+                    email="svc@example.com",
+                    role=UserRole.SERVICE_ACCOUNT,
+                    has_verified_e3sm_membership=True,
+                )
+            )
+            is False
+        )
