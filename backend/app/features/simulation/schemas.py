@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import Field, HttpUrl, computed_field
+from pydantic import ConfigDict, Field, HttpUrl, computed_field
 
 from app.common.schemas.base import CamelInBaseModel, CamelOutBaseModel
 from app.features.machine.schemas import MachineOut
@@ -270,6 +270,71 @@ class SimulationCreate(CamelInBaseModel):
         Field(
             default_factory=list,
             description="Optional list of external links associated with the simulation",
+        ),
+    ]
+
+
+class SimulationUpdate(CamelInBaseModel):
+    """Schema for narrow v1 simulation metadata updates."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    description: Annotated[
+        str | None, Field(None, description="Optional description of the simulation")
+    ]
+    campaign: Annotated[
+        str | None,
+        Field(
+            None, description="Campaign or run grouping (e.g. historical, amip, tuning)"
+        ),
+    ]
+    experiment_type: Annotated[
+        ExperimentType | str | None,
+        Field(
+            None,
+            description=(
+                "High-level experiment category (e.g. historical, amip, piControl). "
+                "Often aligned with CMIP experiment identifiers."
+            ),
+        ),
+    ]
+    compiler: Annotated[
+        str | None, Field(None, description="Optional compiler used for the simulation")
+    ]
+    hpc_username: Annotated[
+        str | None,
+        Field(
+            None,
+            description="HPC username for provenance (trusted, informational only)",
+        ),
+    ]
+    key_features: Annotated[
+        str | None, Field(None, description="Optional key features of the simulation")
+    ]
+    known_issues: Annotated[
+        str | None, Field(None, description="Optional known issues with the simulation")
+    ]
+    notes_markdown: Annotated[
+        str | None,
+        Field(None, description="Optional additional notes in markdown format"),
+    ]
+    git_repository_url: Annotated[
+        HttpUrl | None, Field(None, description="Optional Git repository URL")
+    ]
+    git_branch: Annotated[
+        str | None,
+        Field(
+            None, description="Optional Git branch name associated with the simulation"
+        ),
+    ]
+    git_tag: Annotated[
+        str | None, Field(None, description="Optional Git tag for the simulation")
+    ]
+    git_commit_hash: Annotated[
+        str | None,
+        Field(
+            None,
+            description="Optional Git commit hash associated with the simulation",
         ),
     ]
 

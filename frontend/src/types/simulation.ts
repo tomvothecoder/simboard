@@ -129,6 +129,25 @@ export interface SimulationCreate {
   artifacts: ArtifactIn[];
   links: ExternalLinkIn[];
 }
+
+export type SimulationUpdate = Partial<
+  Pick<
+    SimulationCreate,
+    | 'description'
+    | 'campaign'
+    | 'experimentType'
+    | 'compiler'
+    | 'hpcUsername'
+    | 'keyFeatures'
+    | 'knownIssues'
+    | 'notesMarkdown'
+    | 'gitRepositoryUrl'
+    | 'gitBranch'
+    | 'gitTag'
+    | 'gitCommitHash'
+  >
+>;
+
 // Extends SimulationCreate with optional fields for file paths.
 export interface SimulationCreateForm extends SimulationCreate {
   outputPath?: string | null;
