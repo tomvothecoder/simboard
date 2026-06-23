@@ -12,6 +12,7 @@ type MarkdownSegment =
   | { type: 'headerless-table'; rows: string[][] };
 
 const NO_HEADER_TABLE_MARKER = '<!-- simboard-table:no-header -->';
+const HTML_BREAK_TAG_PATTERN = /<br\s*\/?>/gi;
 
 const isExternalHref = (href: string): boolean => /^https?:\/\//i.test(href);
 
@@ -135,6 +136,26 @@ const markdownComponents: Components = {
         target={isExternal ? '_blank' : undefined}
         {...props}
       />
+    );
+  },
+  img: ({ alt, src }) => {
+    const imageLabel = alt?.trim() || 'Image';
+    const isExternal = src ? isExternalHref(src) : false;
+
+    return (
+      <span className="inline-flex flex-wrap items-center gap-1 rounded border border-dashed border-border px-2 py-1 text-sm text-muted-foreground">
+        <span>{imageLabel} not rendered.</span>
+        {src ? (
+          <a
+            className="font-medium text-blue-600 underline underline-offset-4"
+            href={src}
+            rel={isExternal ? 'noreferrer noopener' : undefined}
+            target={isExternal ? '_blank' : undefined}
+          >
+            Open source
+          </a>
+        ) : null}
+      </span>
     );
   },
   ul: ({ className, ...props }) => (
@@ -269,7 +290,7 @@ export const MarkdownContent = ({
                           skipHtml
                           components={markdownComponents}
                         >
-                          {cell.replace(/<br \/>/g, '\n')}
+                          {cell.replace(HTML_BREAK_TAG_PATTERN, '\n')}
                         </ReactMarkdown>
                       </td>
                     ))}

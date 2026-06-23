@@ -68,6 +68,8 @@ const createEditorPlugins = () => [
   }),
 ];
 
+const createInitialPlugins = () => createEditorPlugins();
+
 export const MarkdownEditorField = ({
   label,
   value,
@@ -78,7 +80,7 @@ export const MarkdownEditorField = ({
 }: MarkdownEditorFieldProps) => {
   const editorRef = useRef<MDXEditorMethods | null>(null);
   const lastMarkdownRef = useRef(value);
-  const pluginsRef = useRef(createEditorPlugins());
+  const [plugins] = useState(createInitialPlugins);
   const [mode, setMode] = useState<'edit' | 'preview'>('edit');
 
   useEffect(() => {
@@ -118,7 +120,7 @@ export const MarkdownEditorField = ({
               placeholder={placeholder}
               className="sb-mdxeditor"
               contentEditableClassName={cn('sb-mdxeditor-content', minHeightClassName)}
-              plugins={pluginsRef.current}
+              plugins={plugins}
               onChange={(nextMarkdown, initialMarkdownNormalize) => {
                 lastMarkdownRef.current = nextMarkdown;
 
