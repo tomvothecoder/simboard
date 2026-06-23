@@ -77,3 +77,66 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  .sb-mdxeditor-shell {
+    @apply overflow-hidden;
+  }
+
+  .sb-mdxeditor {
+    @apply bg-background text-foreground;
+  }
+
+  .sb-mdxeditor-toolbar {
+    @apply flex flex-wrap gap-1 border-b border-border bg-muted/20 px-2 py-1;
+  }
+
+  .sb-mdxeditor-content {
+    @apply px-3 py-2 text-sm leading-6 text-foreground outline-none;
+    min-height: inherit;
+  }
+
+  .sb-mdxeditor .cm-editor,
+  .sb-mdxeditor .cm-scroller,
+  .sb-mdxeditor [contenteditable='true'] {
+    min-height: inherit;
+  }
+
+  .sb-mdxeditor .cm-editor,
+  .sb-mdxeditor .cm-scroller,
+  .sb-mdxeditor .cm-content {
+    @apply text-sm;
+  }
+
+  .sb-mdxeditor .cm-editor {
+    @apply border-0;
+  }
+
+  .sb-mdxeditor :is([contenteditable='true'], .cm-editor) {
+    @apply bg-background;
+  }
+
+  .sb-mdxeditor table {
+    @apply my-4 w-full border-collapse text-left text-sm;
+  }
+
+  .sb-mdxeditor th {
+    @apply border border-border bg-muted/40 px-3 py-2 font-semibold;
+  }
+
+  .sb-mdxeditor td {
+    @apply border border-border px-3 py-2 align-top;
+  }
+
+  .sb-mdxeditor blockquote {
+    @apply border-l-2 border-border/80 pl-4 italic text-muted-foreground;
+  }
+
+  .sb-mdxeditor pre {
+    @apply overflow-x-auto rounded-md bg-slate-950 px-3 py-2 text-sm text-slate-50;
+  }
+
+  .sb-mdxeditor hr {
+    @apply my-4 border-border;
+  }
+}

@@ -7,10 +7,95 @@ interface MarkdownContentProps {
   placeholder?: string;
 }
 
+type MarkdownSegment =
+  | { type: 'markdown'; content: string }
+  | { type: 'headerless-table'; rows: string[][] };
+
+const NO_HEADER_TABLE_MARKER = '<!-- simboard-table:no-header -->';
+
 const isExternalHref = (href: string): boolean => /^https?:\/\//i.test(href);
 
 const joinClasses = (...classNames: Array<string | undefined | null | false>): string =>
   classNames.filter(Boolean).join(' ');
+
+const parseTableRow = (line: string): string[] => {
+  const trimmedLine = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+  const cells: string[] = [];
+  let currentCell = '';
+
+  for (let index = 0; index < trimmedLine.length; index += 1) {
+    const character = trimmedLine[index];
+    const nextCharacter = trimmedLine[index + 1];
+
+    if (character === '\\' && nextCharacter === '|') {
+      currentCell += '|';
+      index += 1;
+      continue;
+    }
+
+    if (character === '|') {
+      cells.push(currentCell.trim());
+      currentCell = '';
+      continue;
+    }
+
+    currentCell += character;
+  }
+
+  cells.push(currentCell.trim());
+
+  return cells;
+};
+
+const splitMarkdownSegments = (content: string): MarkdownSegment[] => {
+  const lines = content.split('\n');
+  const segments: MarkdownSegment[] = [];
+  let currentMarkdownLines: string[] = [];
+  let lineIndex = 0;
+
+  const flushMarkdownLines = () => {
+    if (currentMarkdownLines.length === 0) {
+      return;
+    }
+
+    segments.push({ type: 'markdown', content: currentMarkdownLines.join('\n') });
+    currentMarkdownLines = [];
+  };
+
+  while (lineIndex < lines.length) {
+    if (lines[lineIndex]?.trim() !== NO_HEADER_TABLE_MARKER) {
+      currentMarkdownLines.push(lines[lineIndex] ?? '');
+      lineIndex += 1;
+      continue;
+    }
+
+    const tableLines: string[] = [];
+    let tableLineIndex = lineIndex + 1;
+
+    while (tableLineIndex < lines.length && lines[tableLineIndex]?.trim().startsWith('|')) {
+      tableLines.push(lines[tableLineIndex] ?? '');
+      tableLineIndex += 1;
+    }
+
+    if (tableLines.length < 2) {
+      currentMarkdownLines.push(lines[lineIndex] ?? '');
+      lineIndex += 1;
+      continue;
+    }
+
+    flushMarkdownLines();
+
+    segments.push({
+      type: 'headerless-table',
+      rows: [parseTableRow(tableLines[0]), ...tableLines.slice(2).map(parseTableRow)],
+    });
+    lineIndex = tableLineIndex;
+  }
+
+  flushMarkdownLines();
+
+  return segments;
+};
 
 const markdownComponents: Components = {
   h1: ({ className, ...props }) => (
@@ -135,6 +220,8 @@ export const MarkdownContent = ({
     );
   }
 
+  const segments = splitMarkdownSegments(content);
+
   return (
     <div
       className={joinClasses(
@@ -142,9 +229,40 @@ export const MarkdownContent = ({
         className,
       )}
     >
-      <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml components={markdownComponents}>
-        {content}
-      </ReactMarkdown>
+      {segments.map((segment, index) =>
+        segment.type === 'markdown' ? (
+          <ReactMarkdown
+            key={`markdown-${index}`}
+            remarkPlugins={[remarkGfm]}
+            skipHtml
+            components={markdownComponents}
+          >
+            {segment.content}
+          </ReactMarkdown>
+        ) : (
+          <div key={`headerless-table-${index}`} className="my-4 overflow-x-auto">
+            <table className="w-full border-collapse text-left text-sm">
+              <tbody className="[&_tr:last-child]:border-0">
+                {segment.rows.map((row, rowIndex) => (
+                  <tr key={rowIndex} className="border-b border-border/70">
+                    {row.map((cell, cellIndex) => (
+                      <td key={cellIndex} className="px-3 py-2 align-top">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          skipHtml
+                          components={markdownComponents}
+                        >
+                          {cell.replace(/<br \/>/g, '\n')}
+                        </ReactMarkdown>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ),
+      )}
     </div>
   );
 };
