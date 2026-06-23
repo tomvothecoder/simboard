@@ -159,16 +159,33 @@ const markdownComponents: Components = {
       {...props}
     />
   ),
-  code: ({ className, ...props }) => (
-    <code
-      className={joinClasses('rounded bg-muted px-1.5 py-0.5 font-mono text-[0.875em]', className)}
-      {...props}
-    />
-  ),
+  code: ({ className, children, ...props }) => {
+    const isBlockCode = className?.includes('language-') ?? false;
+
+    if (isBlockCode) {
+      return (
+        <code className={joinClasses('font-mono text-[0.875em]', className)} {...props}>
+          {children}
+        </code>
+      );
+    }
+
+    return (
+      <code
+        className={joinClasses(
+          'rounded bg-muted px-1.5 py-0.5 font-mono text-[0.875em]',
+          className,
+        )}
+        {...props}
+      >
+        {children}
+      </code>
+    );
+  },
   pre: ({ className, ...props }) => (
     <pre
       className={joinClasses(
-        'mt-3 overflow-x-auto rounded-md bg-slate-950 px-3 py-2 font-mono text-sm text-slate-50',
+        'mt-3 overflow-x-auto rounded-md bg-slate-950 px-3 py-2 font-mono text-sm text-slate-50 [&_code]:rounded-none [&_code]:bg-transparent [&_code]:px-0 [&_code]:py-0 [&_code]:text-inherit',
         className,
       )}
       {...props}

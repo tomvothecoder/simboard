@@ -122,7 +122,7 @@ export const MarkdownEditorField = ({
               onChange={(nextMarkdown, initialMarkdownNormalize) => {
                 lastMarkdownRef.current = nextMarkdown;
 
-                if (initialMarkdownNormalize) {
+                if (initialMarkdownNormalize && nextMarkdown === value) {
                   return;
                 }
 
