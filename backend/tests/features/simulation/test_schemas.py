@@ -253,6 +253,7 @@ class TestExternalLinkOutSchema:
 
         assert link_out.url == HttpUrl("https://example.com/simulation-owned")
         assert link_out.label == "Simulation-owned"
+        assert link_out.owner_type == "simulation"
 
     def test_validates_case_owned_external_link_from_attributes(self):
         link = SimpleNamespace(
@@ -270,6 +271,7 @@ class TestExternalLinkOutSchema:
 
         assert link_out.url == HttpUrl("https://example.com/case-owned")
         assert link_out.label == "Case-owned"
+        assert link_out.owner_type == "case"
 
 
 class TestSimulationOutSchema:
@@ -430,6 +432,7 @@ class TestSimulationOutSchema:
                     "kind": "diagnostic",
                     "url": HttpUrl("http://example.com/link1"),
                     "label": "link1",
+                    "owner_type": "simulation",
                     "id": uuid4(),
                     "created_at": datetime(2023, 1, 1, 0, 0, 0),
                     "updated_at": datetime(2023, 1, 2, 0, 0, 0),
@@ -570,6 +573,7 @@ class TestSimulationOutSchema:
                     kind=ExternalLinkKind.DIAGNOSTIC,
                     url=HttpUrl("http://example.com/link1"),
                     label="link1",
+                    owner_type="simulation",
                     id=uuid4(),
                     created_at=datetime(2023, 1, 1, 0, 0, 0),
                     updated_at=datetime(2023, 1, 2, 0, 0, 0),
@@ -578,6 +582,7 @@ class TestSimulationOutSchema:
                     kind=ExternalLinkKind.PERFORMANCE,
                     url=HttpUrl("http://example.com/link2"),
                     label="link2",
+                    owner_type="simulation",
                     id=uuid4(),
                     created_at=datetime(2023, 1, 1, 0, 0, 0),
                     updated_at=datetime(2023, 1, 2, 0, 0, 0),

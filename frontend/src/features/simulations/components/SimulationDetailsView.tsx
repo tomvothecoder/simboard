@@ -180,11 +180,19 @@ const toEditableArtifactRows = (simulation: SimulationOut): EditableArtifactRow[
   }));
 
 const toEditableLinkRows = (simulation: SimulationOut): EditableLinkRow[] =>
-  simulation.links.map((link) => ({
-    kind: link.kind,
-    label: link.label ?? '',
-    value: link.url,
-  }));
+  simulation.links
+    .filter((link) => link.ownerType === 'simulation')
+    .map((link) => ({
+      kind: link.kind,
+      label: link.label ?? '',
+      value: link.url,
+    }));
+
+const toInheritedCaseLinks = (simulation: SimulationOut) =>
+  simulation.links.filter((link) => link.ownerType === 'case');
+
+const formatLinkKindLabel = (kind: ExternalLinkKind): string =>
+  EXTERNAL_LINK_KIND_OPTIONS.find((option) => option.value === kind)?.label ?? kind;
 
 const normalizeOptionalText = (value: string): string | null => {
   const trimmed = value.trim();
@@ -578,6 +586,7 @@ export const SimulationDetailsView = ({
     links: [],
   });
   const [saveSummaryMessage, setSaveSummaryMessage] = useState<string | null>(null);
+  const inheritedCaseLinks = toInheritedCaseLinks(simulation);
   const performanceLinks = simulation.groupedLinks.performance ?? [];
   const outputArtifacts = getArtifactsByKind(
     simulation.artifacts,
@@ -1317,7 +1326,7 @@ export const SimulationDetailsView = ({
                     <div className="space-y-4">
                       <EditableResourceList
                         title="Saved External Links"
-                        description="Add, relabel, or remove diagnostic, performance, docs, and other links."
+                        description="Add, relabel, or remove simulation-owned diagnostic, performance, docs, and other links."
                         items={linkRows}
                         kindOptions={EXTERNAL_LINK_KIND_OPTIONS}
                         valueLabel="URL"
@@ -1330,6 +1339,36 @@ export const SimulationDetailsView = ({
                         onRemove={removeLinkRow}
                         rowErrors={combinedRowErrors.links}
                       />
+                      {inheritedCaseLinks.length ? (
+                        <div className="rounded-md border bg-muted/20 px-3 py-3 text-sm">
+                          <div className="font-medium">Inherited case links</div>
+                          <div className="mt-1 text-muted-foreground">
+                            These links come from case-level diagnostics. They stay visible here
+                            but are not changed by simulation save.
+                          </div>
+                          <ul className="mt-3 space-y-2">
+                            {inheritedCaseLinks.map((link) => (
+                              <li
+                                key={link.id}
+                                className="flex flex-wrap items-center gap-2 text-sm"
+                              >
+                                <span className="rounded-full border border-border/70 px-2 py-0.5 text-xs text-muted-foreground">
+                                  {formatLinkKindLabel(link.kind)}
+                                </span>
+                                <a
+                                  className="min-w-0 truncate text-blue-600 hover:underline"
+                                  href={link.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  title={link.url}
+                                >
+                                  {link.label || link.url}
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
                       {paceLink ? (
                         <div className="rounded-md border bg-muted/20 px-3 py-3 text-sm">
                           <div className="font-medium">PACE helper link</div>

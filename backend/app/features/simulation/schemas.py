@@ -3,7 +3,14 @@ from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import ConfigDict, Field, HttpUrl, computed_field, field_validator
+from pydantic import (
+    ConfigDict,
+    Field,
+    HttpUrl,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
 from app.common.schemas.base import CamelInBaseModel, CamelOutBaseModel
 from app.features.machine.schemas import MachineOut
@@ -77,6 +84,50 @@ class ExternalLinkCreate(CamelInBaseModel):
 class ExternalLinkOut(CamelOutBaseModel):
     """Schema for representing an External Link object."""
 
+    @model_validator(mode="before")
+    @classmethod
+    def populate_owner_type(cls, value: Any) -> Any:
+        if isinstance(value, dict):
+            if "owner_type" in value or "ownerType" in value:
+                return value
+
+            if (
+                value.get("simulation_id") is not None
+                or value.get("simulationId") is not None
+            ):
+                return {**value, "owner_type": "simulation"}
+
+            if value.get("case_id") is not None or value.get("caseId") is not None:
+                return {**value, "owner_type": "case"}
+
+            return value
+
+        if getattr(value, "owner_type", None) is not None:
+            return value
+
+        simulation_id = getattr(value, "simulation_id", None)
+        case_id = getattr(value, "case_id", None)
+        owner_type = (
+            "simulation"
+            if simulation_id is not None
+            else "case"
+            if case_id is not None
+            else None
+        )
+
+        if owner_type is None:
+            return value
+
+        return {
+            "id": value.id,
+            "kind": value.kind,
+            "url": value.url,
+            "label": value.label,
+            "owner_type": owner_type,
+            "created_at": value.created_at,
+            "updated_at": value.updated_at,
+        }
+
     id: Annotated[
         UUID, Field(..., description="The unique identifier of the external link.")
     ]
@@ -86,6 +137,16 @@ class ExternalLinkOut(CamelOutBaseModel):
     url: Annotated[HttpUrl, Field(..., description="The URL of the external link.")]
     label: Annotated[
         str | None, Field(None, description="An optional label for the external link.")
+    ]
+    owner_type: Annotated[
+        Literal["simulation", "case"],
+        Field(
+            ...,
+            description=(
+                "Owner of this link in SimBoard storage. Simulation-owned links are "
+                "editable from simulation PATCH; case-owned links are read-only there."
+            ),
+        ),
     ]
     created_at: Annotated[
         datetime,

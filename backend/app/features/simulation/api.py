@@ -11,7 +11,7 @@ from app.core.database import transaction
 from app.features.assistant.orchestrator import is_summary_llm_available
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
-from app.features.machine.models import Machine
+from app.features.machine.utils import resolve_machine_by_name
 from app.features.simulation.enums import ExternalLinkKind
 from app.features.simulation.link_utils import merge_simulation_and_case_links
 from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
@@ -389,22 +389,29 @@ def _resolve_case_id_for_diagnostics_link(
     hpc_username: str,
 ) -> UUID:
     """Resolve a unique case ID from case, machine, and HPC username."""
-    matches = (
-        db.query(Case.id)
-        .join(Machine, Case.machine_id == Machine.id)
-        .filter(Case.name == case_name)
-        .filter(Machine.name == machine_name)
-        .filter(Case.hpc_username == hpc_username)
-        .all()
-    )
+    machine = resolve_machine_by_name(db, machine_name)
 
-    if not matches:
+    if machine is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No case matched the provided case_name, machine, and hpc_username.",
         )
 
-    return matches[0][0]
+    match = (
+        db.query(Case.id)
+        .filter(Case.name == case_name)
+        .filter(Case.machine_id == machine.id)
+        .filter(Case.hpc_username == hpc_username)
+        .one_or_none()
+    )
+
+    if match is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No case matched the provided case_name, machine, and hpc_username.",
+        )
+
+    return match[0]
 
 
 def _upsert_case_diagnostic_links(
@@ -528,7 +535,9 @@ def _case_to_out(case: Case, *, include_links: bool = False) -> CaseOut:
         simulations=summaries,
         machine_names=machine_names,
         hpc_usernames=hpc_usernames,
-        links=case.links if include_links else [],
+        links=[_external_link_to_out(link) for link in case.links]
+        if include_links
+        else [],
         created_at=case.created_at,
         updated_at=case.updated_at,
     )
@@ -556,6 +565,20 @@ def _build_external_link_models(links: list) -> list[ExternalLink]:
         models.append(ExternalLink(**link_data))
 
     return models
+
+
+def _external_link_to_out(link: ExternalLink) -> dict:
+    owner_type = "simulation" if link.simulation_id is not None else "case"
+
+    return {
+        "id": link.id,
+        "kind": link.kind,
+        "url": link.url,
+        "label": link.label,
+        "owner_type": owner_type,
+        "created_at": link.created_at,
+        "updated_at": link.updated_at,
+    }
 
 
 def _simulation_detail_query(db: Session):
@@ -586,6 +609,7 @@ def _simulation_to_out(sim: Simulation) -> SimulationOut:
     case = sim.case
     llm_available = is_summary_llm_available()
     merged_links = merge_simulation_and_case_links(sim.links, case.links)
+    serialized_links = [_external_link_to_out(link) for link in merged_links]
 
     result = SimulationOut.model_validate(
         {
@@ -595,7 +619,7 @@ def _simulation_to_out(sim: Simulation) -> SimulationOut:
             "machine_id": case.machine_id,
             "hpc_username": case.hpc_username,
             "machine": case.machine,
-            "links": merged_links,
+            "links": serialized_links,
             "summary_capabilities": SimulationSummaryCapabilitiesOut(
                 llm_available=llm_available,
                 auto_generate_deterministic_on_load=not llm_available,
