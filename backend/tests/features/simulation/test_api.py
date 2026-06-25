@@ -12,10 +12,18 @@ from app.core.config import settings
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
-from app.features.simulation.api import create_simulation, update_simulation
+from app.features.simulation.api import (
+    create_simulation,
+    update_case,
+    update_simulation,
+)
 from app.features.simulation.enums import SimulationStatus, SimulationType
 from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
-from app.features.simulation.schemas import SimulationCreate, SimulationUpdate
+from app.features.simulation.schemas import (
+    CaseUpdate,
+    SimulationCreate,
+    SimulationUpdate,
+)
 from app.features.user.manager import current_active_user
 from app.features.user.models import User, UserRole
 from app.main import app
@@ -211,6 +219,10 @@ class TestListCases:
         assert case_data["name"] == "test_case_nested"
         assert case_data["machineNames"] == [machine.name]
         assert case_data["hpcUsernames"] == ["test-user"]
+        assert "description" not in case_data
+        assert "keyFeatures" not in case_data
+        assert "knownIssues" not in case_data
+        assert "notesMarkdown" not in case_data
 
         # Verify nested simulations are SimulationSummaryOut (lightweight)
         sims = case_data["simulations"]
@@ -287,7 +299,7 @@ class TestListCaseNames:
 
 
 class TestGetCase:
-    def test_endpoint_returns_case_with_simulations(
+    def test_endpoint_returns_case_detail_with_metadata(
         self, client, db: Session, normal_user_sync, admin_user_sync
     ):
         machine = db.query(Machine).first()
@@ -295,6 +307,10 @@ class TestGetCase:
 
         case = _create_case(db, "test_case_detail")
         case.hpc_username = "case-user"
+        case.description = "Shared case description"
+        case.key_features = "Shared key features"
+        case.known_issues = "Shared known issues"
+        case.notes_markdown = "## Shared notes"
         db.flush()
 
         ingestion = Ingestion(
@@ -337,6 +353,10 @@ class TestGetCase:
         assert len(data["simulations"]) == 1
         assert data["machineNames"] == [machine.name]
         assert data["hpcUsernames"] == ["case-user"]
+        assert data["description"] == "Shared case description"
+        assert data["keyFeatures"] == "Shared key features"
+        assert data["knownIssues"] == "Shared known issues"
+        assert data["notesMarkdown"] == "## Shared notes"
         assert data["simulations"][0]["executionId"] == "case-detail-exec-1"
         assert data["simulations"][0]["caseHash"] == "detail-hash-1"
 
@@ -418,7 +438,159 @@ class TestCreateSimulation:
 
         res = client.post(f"{API_BASE}/simulations", json=payload)
         assert res.status_code == 400
-        assert "not found" in res.json()["detail"].lower()
+        assert res.json() == {"detail": f"Case '{payload['caseId']}' not found."}
+
+
+class TestUpdateCase:
+    def test_endpoint_updates_case_metadata(
+        self, client, db: Session, normal_user_sync
+    ):
+        case = _create_case(db, "test_case_metadata_patch")
+        case.description = "Original case description"
+        case.key_features = "Original case features"
+        case.known_issues = "Original case issues"
+        case.notes_markdown = "Original case notes"
+        original_updated_at = datetime.now(timezone.utc) - timedelta(days=2)
+        case.updated_at = original_updated_at
+        db.commit()
+
+        payload = {
+            "description": "Updated case description",
+            "keyFeatures": "Updated case features",
+            "notesMarkdown": "Updated case notes",
+        }
+
+        res = client.patch(f"{API_BASE}/cases/{case.id}", json=payload)
+
+        assert res.status_code == 200
+        data = res.json()
+        assert data["description"] == payload["description"]
+        assert data["keyFeatures"] == payload["keyFeatures"]
+        assert data["knownIssues"] == "Original case issues"
+        assert data["notesMarkdown"] == payload["notesMarkdown"]
+        assert data["updatedAt"] != original_updated_at.isoformat()
+
+        db.expire_all()
+        updated_case = db.query(Case).filter(Case.id == case.id).one()
+        assert updated_case.description == payload["description"]
+        assert updated_case.key_features == payload["keyFeatures"]
+        assert updated_case.known_issues == "Original case issues"
+        assert updated_case.notes_markdown == payload["notesMarkdown"]
+        assert updated_case.updated_at > original_updated_at
+
+    def test_endpoint_distinguishes_omitted_null_and_blank_values(
+        self, client, db: Session
+    ):
+        case = _create_case(db, "test_case_metadata_normalization")
+        case.description = "Original case description"
+        case.key_features = "Original case features"
+        case.known_issues = "Original case issues"
+        case.notes_markdown = "Original case notes"
+        db.commit()
+
+        res = client.patch(
+            f"{API_BASE}/cases/{case.id}",
+            json={
+                "description": None,
+                "knownIssues": "   ",
+                "notesMarkdown": "Updated case notes",
+            },
+        )
+
+        assert res.status_code == 200
+        data = res.json()
+        assert data["description"] is None
+        assert data["keyFeatures"] == "Original case features"
+        assert data["knownIssues"] is None
+        assert data["notesMarkdown"] == "Updated case notes"
+
+        db.expire_all()
+        updated_case = db.query(Case).filter(Case.id == case.id).one()
+        assert updated_case.description is None
+        assert updated_case.key_features == "Original case features"
+        assert updated_case.known_issues is None
+        assert updated_case.notes_markdown == "Updated case notes"
+
+    def test_endpoint_returns_404_when_case_not_found(self, client):
+        res = client.patch(
+            f"{API_BASE}/cases/{uuid4()}",
+            json={"description": "Should fail"},
+        )
+
+        assert res.status_code == 404
+        assert res.json() == {"detail": "Case not found"}
+
+    def test_endpoint_returns_401_without_authentication(self, client, db: Session):
+        case = _create_case(db, "test_case_metadata_unauth")
+        db.commit()
+
+        app.dependency_overrides.pop(current_active_user, None)
+
+        res = client.patch(
+            f"{API_BASE}/cases/{case.id}",
+            json={"description": "Should fail"},
+        )
+
+        assert res.status_code == 401
+
+    def test_plain_user_gets_403_for_patch(self, client, db: Session, normal_user_sync):
+        case = _create_case(db, "test_case_metadata_forbidden")
+        db.commit()
+
+        _override_current_user(
+            user_id=normal_user_sync["id"],
+            email=normal_user_sync["email"],
+            role=UserRole.USER,
+            has_membership=False,
+        )
+
+        res = client.patch(
+            f"{API_BASE}/cases/{case.id}",
+            json={"description": "Should fail"},
+        )
+
+        assert res.status_code == 403
+        assert "verified E3SM GitHub organization membership" in res.json()["detail"]
+
+    def test_update_case_raises_500_when_reload_fails(self) -> None:
+        case_id = uuid4()
+        user_id = uuid4()
+
+        payload = CaseUpdate.model_validate({"description": "Updated"})
+
+        user = User(
+            id=user_id,
+            email="reload-fail@example.com",
+            is_active=True,
+            is_verified=True,
+            role=UserRole.USER,
+            has_verified_e3sm_membership=True,
+        )
+
+        case = MagicMock()
+        case_query = MagicMock()
+        case_query.options.return_value.filter.return_value.one_or_none.side_effect = [
+            case,
+            None,
+        ]
+
+        db = MagicMock(spec=Session)
+        db.query.return_value = case_query
+
+        with patch(
+            "app.features.simulation.api.transaction",
+            return_value=nullcontext(),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                update_case(
+                    case_id=case_id,
+                    payload=payload,
+                    db=db,
+                    user=user,
+                )
+
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.detail == "Failed to load updated case."
 
     def test_manual_create_returns_generic_simulation_payload(
         self, client, db: Session
