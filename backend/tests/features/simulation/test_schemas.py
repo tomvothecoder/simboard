@@ -21,6 +21,7 @@ from app.features.simulation.schemas import (
     SimulationSummaryOut,
     SimulationUpdate,
     _normalize_optional_label,
+    _normalize_optional_text,
 )
 from app.features.user.schemas import UserPreview
 
@@ -238,6 +239,11 @@ class TestSimulationUpdateSchema:
 
 
 class TestCaseUpdateSchema:
+    def test_normalize_optional_text_passthrough_for_non_string_values(self):
+        marker = object()
+
+        assert _normalize_optional_text(marker) is marker
+
     def test_omitted_fields_produce_empty_patch(self):
         update = CaseUpdate()
 

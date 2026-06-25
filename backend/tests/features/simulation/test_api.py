@@ -12,10 +12,18 @@ from app.core.config import settings
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
 from app.features.ingestion.models import Ingestion
 from app.features.machine.models import Machine
-from app.features.simulation.api import create_simulation, update_simulation
+from app.features.simulation.api import (
+    create_simulation,
+    update_case,
+    update_simulation,
+)
 from app.features.simulation.enums import SimulationStatus, SimulationType
 from app.features.simulation.models import Artifact, Case, ExternalLink, Simulation
-from app.features.simulation.schemas import SimulationCreate, SimulationUpdate
+from app.features.simulation.schemas import (
+    CaseUpdate,
+    SimulationCreate,
+    SimulationUpdate,
+)
 from app.features.user.manager import current_active_user
 from app.features.user.models import User, UserRole
 from app.main import app
@@ -503,6 +511,15 @@ class TestUpdateCase:
         assert updated_case.known_issues is None
         assert updated_case.notes_markdown == "Updated case notes"
 
+    def test_endpoint_returns_404_when_case_not_found(self, client):
+        res = client.patch(
+            f"{API_BASE}/cases/{uuid4()}",
+            json={"description": "Should fail"},
+        )
+
+        assert res.status_code == 404
+        assert res.json() == {"detail": "Case not found"}
+
     def test_endpoint_returns_401_without_authentication(self, client, db: Session):
         case = _create_case(db, "test_case_metadata_unauth")
         db.commit()
@@ -534,6 +551,46 @@ class TestUpdateCase:
 
         assert res.status_code == 403
         assert "verified E3SM GitHub organization membership" in res.json()["detail"]
+
+    def test_update_case_raises_500_when_reload_fails(self) -> None:
+        case_id = uuid4()
+        user_id = uuid4()
+
+        payload = CaseUpdate.model_validate({"description": "Updated"})
+
+        user = User(
+            id=user_id,
+            email="reload-fail@example.com",
+            is_active=True,
+            is_verified=True,
+            role=UserRole.USER,
+            has_verified_e3sm_membership=True,
+        )
+
+        case = MagicMock()
+        case_query = MagicMock()
+        case_query.options.return_value.filter.return_value.one_or_none.side_effect = [
+            case,
+            None,
+        ]
+
+        db = MagicMock(spec=Session)
+        db.query.return_value = case_query
+
+        with patch(
+            "app.features.simulation.api.transaction",
+            return_value=nullcontext(),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                update_case(
+                    case_id=case_id,
+                    payload=payload,
+                    db=db,
+                    user=user,
+                )
+
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.detail == "Failed to load updated case."
 
     def test_manual_create_returns_generic_simulation_payload(
         self, client, db: Session
