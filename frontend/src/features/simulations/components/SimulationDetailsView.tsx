@@ -22,6 +22,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { EditableExternalLinkList } from '@/features/simulations/components/EditableExternalLinkList';
 import { MarkdownEditorField } from '@/features/simulations/components/MarkdownEditorField';
 import { SimulationPathCard } from '@/features/simulations/components/SimulationPathCard';
 import {
@@ -29,12 +30,26 @@ import {
   SimulationSummaryRail,
 } from '@/features/simulations/components/SimulationSummaryPanel';
 import { SimulationTypeBadge } from '@/features/simulations/components/SimulationTypeBadge';
+import {
+  areResourceListsEqual,
+  createEmptyRowErrors,
+  type EditableLinkRow,
+  type EditableResourceField,
+  formatLinkKindLabel,
+  getClientLinkRowErrors,
+  hasAnyResourceRowErrors,
+  mapLinkSaveValidationErrors,
+  normalizeLinkRows,
+  normalizeOptionalText,
+  type ResourceRowFieldErrors,
+  toEditableLinkRows,
+} from '@/features/simulations/externalLinkEditing';
 import { cn } from '@/lib/utils';
 import type {
   ArtifactIn,
   ArtifactKind,
-  ExternalLinkIn,
   ExternalLinkKind,
+  ExternalLinkOut,
   SimulationEditableField,
   SimulationOut,
   SimulationStatusValue,
@@ -143,16 +158,6 @@ type EditableArtifactRow = {
   value: string;
 };
 
-type EditableLinkRow = {
-  kind: ExternalLinkKind;
-  label: string;
-  value: string;
-};
-
-type EditableResourceField = 'kind' | 'label' | 'value';
-
-type ResourceRowFieldErrors = Partial<Record<EditableResourceField, string>>;
-
 type ResourceRowErrorsState = {
   artifacts: ResourceRowFieldErrors[];
   links: ResourceRowFieldErrors[];
@@ -165,13 +170,6 @@ const ARTIFACT_KIND_OPTIONS: ReadonlyArray<ResourceKindOption<ArtifactKind>> = [
   { value: 'postprocessing_script', label: 'Post-processing Script' },
 ];
 
-const EXTERNAL_LINK_KIND_OPTIONS: ReadonlyArray<ResourceKindOption<ExternalLinkKind>> = [
-  { value: 'diagnostic', label: 'Diagnostic' },
-  { value: 'performance', label: 'Performance' },
-  { value: 'docs', label: 'Docs' },
-  { value: 'other', label: 'Other' },
-];
-
 const toEditableArtifactRows = (simulation: SimulationOut): EditableArtifactRow[] =>
   simulation.artifacts.map((artifact) => ({
     kind: artifact.kind,
@@ -179,16 +177,93 @@ const toEditableArtifactRows = (simulation: SimulationOut): EditableArtifactRow[
     value: artifact.uri,
   }));
 
-const toEditableLinkRows = (simulation: SimulationOut): EditableLinkRow[] =>
-  simulation.links.map((link) => ({
-    kind: link.kind,
-    label: link.label ?? '',
-    value: link.url,
-  }));
+const toInheritedCaseLinks = (simulation: SimulationOut) =>
+  simulation.links.filter((link) => link.ownerType === 'case');
 
-const normalizeOptionalText = (value: string): string | null => {
-  const trimmed = value.trim();
-  return trimmed || null;
+const groupLinksByKind = (links: ExternalLinkOut[]): Record<ExternalLinkKind, ExternalLinkOut[]> => ({
+  diagnostic: links.filter((link) => link.kind === 'diagnostic'),
+  performance: links.filter((link) => link.kind === 'performance'),
+  docs: links.filter((link) => link.kind === 'docs'),
+  other: links.filter((link) => link.kind === 'other'),
+});
+
+type ExternalResourceSource = 'simulation' | 'case' | 'derived';
+
+const EXTERNAL_RESOURCE_SOURCE_LABELS: Record<ExternalResourceSource, string> = {
+  simulation: 'Simulation',
+  case: 'Case',
+  derived: 'Derived',
+};
+
+const ExternalResourceSourceBadge = ({ source }: { source: ExternalResourceSource }) => (
+  <span className="rounded-full border border-border/70 px-2 py-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">
+    {EXTERNAL_RESOURCE_SOURCE_LABELS[source]}
+  </span>
+);
+
+const ExternalResourceLinkRow = ({
+  href,
+  label,
+  source,
+  auxiliary,
+}: {
+  href: string;
+  label: string;
+  source: ExternalResourceSource;
+  auxiliary?: React.ReactNode;
+}) => (
+  <li className="flex flex-wrap items-start justify-between gap-3 px-4 py-3 text-sm">
+    <div className="min-w-0 flex-1">
+      <a
+        className="font-medium text-blue-600 hover:underline"
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        title={href}
+      >
+        {label}
+      </a>
+      {label !== href ? <div className="mt-0.5 break-all text-xs text-muted-foreground">{href}</div> : null}
+    </div>
+    <div className="flex shrink-0 items-center gap-2">
+      <ExternalResourceSourceBadge source={source} />
+      {auxiliary}
+    </div>
+  </li>
+);
+
+const ExternalResourceLegend = () => (
+  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+    <div className="flex items-center gap-2">
+      <ExternalResourceSourceBadge source="simulation" />
+      <span>saved on this run</span>
+    </div>
+    <div className="flex items-center gap-2">
+      <ExternalResourceSourceBadge source="case" />
+      <span>inherited from case</span>
+    </div>
+    <div className="flex items-center gap-2">
+      <ExternalResourceSourceBadge source="derived" />
+      <span>generated for convenience</span>
+    </div>
+  </div>
+);
+
+const ExternalResourceGroup = ({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) => {
+  return (
+    <div className="border-t first:border-t-0">
+      <div className="bg-muted/20 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {title}
+      </div>
+      <ul className="divide-y">{children}</ul>
+    </div>
+  );
 };
 
 const normalizeArtifactRows = (rows: EditableArtifactRow[]): ArtifactIn[] =>
@@ -198,16 +273,6 @@ const normalizeArtifactRows = (rows: EditableArtifactRow[]): ArtifactIn[] =>
     label: normalizeOptionalText(row.label),
   }));
 
-const normalizeLinkRows = (rows: EditableLinkRow[]): ExternalLinkIn[] =>
-  rows.map((row) => ({
-    kind: row.kind,
-    url: row.value.trim(),
-    label: normalizeOptionalText(row.label),
-  }));
-
-const createEmptyRowErrors = (count: number): ResourceRowFieldErrors[] =>
-  Array.from({ length: count }, () => ({}));
-
 const getClientResourceRowErrors = (
   artifactRows: EditableArtifactRow[],
   linkRows: EditableLinkRow[],
@@ -215,9 +280,7 @@ const getClientResourceRowErrors = (
   artifacts: artifactRows.map((row) =>
     row.value.trim().length === 0 ? { value: 'Artifact URI is required.' } : {},
   ),
-  links: linkRows.map((row) =>
-    row.value.trim().length === 0 ? { value: 'Link URL is required.' } : {},
-  ),
+  links: getClientLinkRowErrors(linkRows),
 });
 
 const normalizeValidationLoc = (loc: Array<string | number>): Array<string | number> =>
@@ -251,12 +314,15 @@ const mapSaveValidationErrors = (
   artifactCount: number,
   linkCount: number,
 ) => {
+  const linkMappings = mapLinkSaveValidationErrors(
+    validationDetails.filter((detail) => normalizeValidationLoc(detail.loc)[0] === 'links'),
+    linkCount,
+  );
   const rowErrors: ResourceRowErrorsState = {
     artifacts: createEmptyRowErrors(artifactCount),
-    links: createEmptyRowErrors(linkCount),
+    links: linkMappings.rowErrors,
   };
-  const unmappedMessages: string[] = [];
-  let hasMappedLinkValueError = false;
+  const unmappedMessages = [...linkMappings.unmappedMessages];
 
   for (const detail of validationDetails) {
     const loc = normalizeValidationLoc(detail.loc);
@@ -279,36 +345,17 @@ const mapSaveValidationErrors = (
       }
     }
 
-    if (
-      resourceName === 'links' &&
-      typeof rowIndex === 'number' &&
-      rowIndex >= 0 &&
-      rowIndex < linkCount &&
-      typeof fieldName === 'string'
-    ) {
-      const field = toEditableField(fieldName);
-      if (field) {
-        rowErrors.links[rowIndex] = {
-          ...rowErrors.links[rowIndex],
-          [field]: detail.msg,
-        };
-        hasMappedLinkValueError ||= field === 'value';
-        continue;
-      }
+    if (resourceName !== 'links') {
+      unmappedMessages.push(`${toValidationPathLabel(detail.loc)}: ${detail.msg}`);
     }
-
-    unmappedMessages.push(`${toValidationPathLabel(detail.loc)}: ${detail.msg}`);
   }
 
   return {
     rowErrors,
     unmappedMessages,
-    hasMappedLinkValueError,
+    hasMappedLinkValueError: linkMappings.hasMappedLinkValueError,
   };
 };
-
-const areResourceListsEqual = (left: unknown, right: unknown): boolean =>
-  JSON.stringify(left) === JSON.stringify(right);
 
 const mergeRowFieldErrors = (
   primary: ResourceRowFieldErrors,
@@ -319,7 +366,7 @@ const mergeRowFieldErrors = (
 });
 
 const hasAnyRowErrors = (rowErrors: ResourceRowErrorsState): boolean =>
-  [...rowErrors.artifacts, ...rowErrors.links].some((row) => Object.keys(row).length > 0);
+  hasAnyResourceRowErrors([...rowErrors.artifacts, ...rowErrors.links]);
 
 const EditableResourceList = <TKind extends string>({
   title,
@@ -522,7 +569,7 @@ const buildUpdatePayload = (
   }
 
   const nextLinks = normalizeLinkRows(linkRows);
-  const currentLinks = normalizeLinkRows(toEditableLinkRows(simulation));
+  const currentLinks = normalizeLinkRows(toEditableLinkRows(simulation.links, 'simulation'));
   if (!areResourceListsEqual(nextLinks, currentLinks)) {
     payload.links = nextLinks;
   }
@@ -572,13 +619,24 @@ export const SimulationDetailsView = ({
   const [artifactRows, setArtifactRows] = useState<EditableArtifactRow[]>(() =>
     toEditableArtifactRows(simulation),
   );
-  const [linkRows, setLinkRows] = useState<EditableLinkRow[]>(() => toEditableLinkRows(simulation));
+  const [linkRows, setLinkRows] = useState<EditableLinkRow[]>(() =>
+    toEditableLinkRows(simulation.links, 'simulation'),
+  );
   const [serverRowErrors, setServerRowErrors] = useState<ResourceRowErrorsState>({
     artifacts: [],
     links: [],
   });
   const [saveSummaryMessage, setSaveSummaryMessage] = useState<string | null>(null);
-  const performanceLinks = simulation.groupedLinks.performance ?? [];
+  const inheritedCaseLinks = toInheritedCaseLinks(simulation);
+  const simulationOwnedLinks = simulation.links.filter((link) => link.ownerType === 'simulation');
+  const groupedSimulationOwnedLinks = groupLinksByKind(simulationOwnedLinks);
+  const groupedInheritedCaseLinks = groupLinksByKind(inheritedCaseLinks);
+  const externalResourceKinds: ExternalLinkKind[] = ['diagnostic', 'performance', 'docs', 'other'];
+  const hasExternalResources =
+    externalResourceKinds.some(
+      (kind) =>
+        groupedSimulationOwnedLinks[kind].length > 0 || groupedInheritedCaseLinks[kind].length > 0,
+    ) || Boolean(paceLink);
   const outputArtifacts = getArtifactsByKind(
     simulation.artifacts,
     simulation.groupedArtifacts,
@@ -628,7 +686,7 @@ export const SimulationDetailsView = ({
   useEffect(() => {
     setFormState(toEditableFormState(simulation));
     setArtifactRows(toEditableArtifactRows(simulation));
-    setLinkRows(toEditableLinkRows(simulation));
+    setLinkRows(toEditableLinkRows(simulation.links, 'simulation'));
     setIsEditing(false);
   }, [simulation]);
 
@@ -636,7 +694,7 @@ export const SimulationDetailsView = ({
     if (!canEdit) {
       setFormState(toEditableFormState(simulation));
       setArtifactRows(toEditableArtifactRows(simulation));
-      setLinkRows(toEditableLinkRows(simulation));
+      setLinkRows(toEditableLinkRows(simulation.links, 'simulation'));
       setIsEditing(false);
     }
   }, [canEdit, simulation]);
@@ -708,7 +766,7 @@ export const SimulationDetailsView = ({
     onClearSaveError?.();
     setFormState(toEditableFormState(simulation));
     setArtifactRows(toEditableArtifactRows(simulation));
-    setLinkRows(toEditableLinkRows(simulation));
+    setLinkRows(toEditableLinkRows(simulation.links, 'simulation'));
     setIsEditing(false);
   };
 
@@ -1315,11 +1373,10 @@ export const SimulationDetailsView = ({
                 <CardContent>
                   {isEditing ? (
                     <div className="space-y-4">
-                      <EditableResourceList
-                        title="Saved External Links"
-                        description="Add, relabel, or remove diagnostic, performance, docs, and other links."
+                      <EditableExternalLinkList
+                        title="Simulation-specific external links"
+                        description="Add, relabel, or remove links saved directly on this simulation."
                         items={linkRows}
-                        kindOptions={EXTERNAL_LINK_KIND_OPTIONS}
                         valueLabel="URL"
                         valuePlaceholder="https://example.com/resource"
                         addLabel="Add link"
@@ -1330,6 +1387,36 @@ export const SimulationDetailsView = ({
                         onRemove={removeLinkRow}
                         rowErrors={combinedRowErrors.links}
                       />
+                      {inheritedCaseLinks.length ? (
+                        <div className="rounded-md border bg-muted/20 px-3 py-3 text-sm">
+                          <div className="font-medium">Inherited case links</div>
+                          <div className="mt-1 text-muted-foreground">
+                            These links come from case-level diagnostics. They stay visible here
+                            but are not changed by simulation save.
+                          </div>
+                          <ul className="mt-3 space-y-2">
+                            {inheritedCaseLinks.map((link) => (
+                              <li
+                                key={link.id}
+                                className="flex flex-wrap items-center gap-2 text-sm"
+                              >
+                                <span className="rounded-full border border-border/70 px-2 py-0.5 text-xs text-muted-foreground">
+                                  {formatLinkKindLabel(link.kind)}
+                                </span>
+                                <a
+                                  className="min-w-0 truncate text-blue-600 hover:underline"
+                                  href={link.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  title={link.url}
+                                >
+                                  {link.label || link.url}
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
                       {paceLink ? (
                         <div className="rounded-md border bg-muted/20 px-3 py-3 text-sm">
                           <div className="font-medium">PACE helper link</div>
@@ -1350,192 +1437,104 @@ export const SimulationDetailsView = ({
                     </div>
                   ) : (
                     <>
-                      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                        <div>
-                          <Label className="mb-1 block text-sm">Diagnostics</Label>
-                          {simulation.groupedLinks.diagnostic?.length ? (
-                            <ul className="list-disc pl-5 text-sm">
-                              {simulation.groupedLinks.diagnostic.map((d) => (
-                                <li key={d.url} className="flex items-center gap-2">
-                                  <a
-                                    className="flex items-center gap-1 text-blue-600 hover:underline"
-                                    href={d.url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                  >
-                                    <svg
-                                      xmlns="http://www.w3.org/2000/svg"
-                                      width="16"
-                                      height="16"
-                                      fill="none"
-                                      viewBox="0 0 24 24"
-                                      stroke="currentColor"
-                                      className="inline-block"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M15 7h2a5 5 0 015 5v0a5 5 0 01-5 5h-2m-6 0H7a5 5 0 01-5-5v0a5 5 0 015-5h2m1 5h4"
-                                      />
-                                    </svg>
-                                    {d.label}
-                                  </a>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <div className="mb-2 text-sm text-muted-foreground">
-                              Links to diagnostics will appear here once available.
-                            </div>
-                          )}
-                        </div>
-                        <div>
-                          <Label className="mb-1 block text-sm">Performance</Label>
-                          {performanceLinks.length || paceLink ? (
-                            <ul className="list-disc pl-5 text-sm">
-                              {performanceLinks.map((p) => (
-                                <li key={p.url} className="flex items-center gap-2">
-                                  <a
-                                    className="flex items-center gap-1 text-blue-600 hover:underline"
-                                    href={p.url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                  >
-                                    <svg
-                                      xmlns="http://www.w3.org/2000/svg"
-                                      width="16"
-                                      height="16"
-                                      fill="none"
-                                      viewBox="0 0 24 24"
-                                      stroke="currentColor"
-                                      className="inline-block"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M15 7h2a5 5 0 015 5v0a5 5 0 01-5 5h-2m-6 0H7a5 5 0 01-5-5v0a5 5 0 015-5h2m1 5h4"
-                                      />
-                                    </svg>
-                                    {p.label}
-                                  </a>
-                                </li>
-                              ))}
-                              {paceLink && (
-                                <li className="flex items-center gap-2">
-                                  <a
-                                    className="flex items-center gap-1 text-blue-600 hover:underline"
-                                    href={paceLink.href}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                  >
-                                    <svg
-                                      xmlns="http://www.w3.org/2000/svg"
-                                      width="16"
-                                      height="16"
-                                      fill="none"
-                                      viewBox="0 0 24 24"
-                                      stroke="currentColor"
-                                      className="inline-block"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M15 7h2a5 5 0 015 5v0a5 5 0 01-5 5h-2m-6 0H7a5 5 0 01-5-5v0a5 5 0 015-5h2m1 5h4"
-                                      />
-                                    </svg>
-                                    {paceLink.label}
-                                  </a>
-                                  {isResolvingPace && (
-                                    <>
-                                      <Spinner className="size-3 text-muted-foreground" />
-                                      <TooltipProvider delayDuration={150}>
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <button
-                                              type="button"
-                                              aria-label="PACE link resolution status"
-                                              className="text-muted-foreground hover:text-foreground"
-                                            >
-                                              <CircleHelp className="size-3" />
-                                            </button>
-                                          </TooltipTrigger>
-                                          <TooltipContent>
-                                            Checking for a direct PACE experiment link
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      </TooltipProvider>
-                                    </>
-                                  )}
-                                  {!isResolvingPace && showPaceFallbackInfo && (
-                                    <TooltipProvider delayDuration={150}>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <button
-                                            type="button"
-                                            aria-label="PACE link fallback information"
-                                            className="text-muted-foreground hover:text-foreground"
-                                          >
-                                            <CircleHelp className="size-3" />
-                                          </button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                          Direct PACE experiment link not found. Search results may
-                                          still contain this run.
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </TooltipProvider>
-                                  )}
-                                </li>
-                              )}
-                            </ul>
-                          ) : (
-                            <div className="mb-2 text-sm text-muted-foreground">
-                              Links to performance metrics will appear here once available.
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        {Object.entries(simulation.groupedLinks)
-                          .filter(([key]) => key !== 'diagnostic' && key !== 'performance')
-                          .map(([key, linkList]) => (
-                            <div key={key} className="mb-4">
-                              <h4 className="text-sm font-medium capitalize">{key}</h4>
-                              <ul className="list-disc pl-5 text-sm">
-                                {linkList.map((link) => (
-                                  <li key={link.url} className="flex items-center gap-2">
-                                    <a
-                                      className="flex items-center gap-1 text-blue-600 hover:underline"
+                      <div className="space-y-4">
+                        <ExternalResourceLegend />
+                        {hasExternalResources ? (
+                          <div className="overflow-hidden rounded-lg border">
+                            {externalResourceKinds.map((kind) => {
+                              const simulationLinksForKind = groupedSimulationOwnedLinks[kind];
+                              const caseLinksForKind = groupedInheritedCaseLinks[kind];
+                              const showDerivedPaceLink = kind === 'performance' && Boolean(paceLink);
+
+                              if (
+                                simulationLinksForKind.length === 0 &&
+                                caseLinksForKind.length === 0 &&
+                                !showDerivedPaceLink
+                              ) {
+                                return null;
+                              }
+
+                              return (
+                                <ExternalResourceGroup
+                                  key={kind}
+                                  title={formatLinkKindLabel(kind)}
+                                >
+                                  {simulationLinksForKind.map((link) => (
+                                    <ExternalResourceLinkRow
+                                      key={link.id}
                                       href={link.url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                    >
-                                      <svg
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        width="16"
-                                        height="16"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                        className="inline-block"
-                                      >
-                                        <path
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                          strokeWidth={2}
-                                          d="M15 7h2a5 5 0 015 5v0a5 5 0 01-5 5h-2m-6 0H7a5 5 0 01-5-5v0a5 5 0 015-5h2m1 5h4"
-                                        />
-                                      </svg>
-                                      {link.label}
-                                    </a>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          ))}
+                                      label={link.label || link.url}
+                                      source="simulation"
+                                    />
+                                  ))}
+                                  {caseLinksForKind.map((link) => (
+                                    <ExternalResourceLinkRow
+                                      key={link.id}
+                                      href={link.url}
+                                      label={link.label || link.url}
+                                      source="case"
+                                    />
+                                  ))}
+                                  {showDerivedPaceLink && paceLink ? (
+                                    <ExternalResourceLinkRow
+                                      href={paceLink.href}
+                                      label={paceLink.label}
+                                      source="derived"
+                                      auxiliary={
+                                        <>
+                                          {isResolvingPace ? (
+                                            <>
+                                              <Spinner className="size-3 text-muted-foreground" />
+                                              <TooltipProvider delayDuration={150}>
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <button
+                                                      type="button"
+                                                      aria-label="PACE link resolution status"
+                                                      className="text-muted-foreground hover:text-foreground"
+                                                    >
+                                                      <CircleHelp className="size-3" />
+                                                    </button>
+                                                  </TooltipTrigger>
+                                                  <TooltipContent>
+                                                    Checking for a direct PACE experiment link
+                                                  </TooltipContent>
+                                                </Tooltip>
+                                              </TooltipProvider>
+                                            </>
+                                          ) : null}
+                                          {!isResolvingPace && showPaceFallbackInfo ? (
+                                            <TooltipProvider delayDuration={150}>
+                                              <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                  <button
+                                                    type="button"
+                                                    aria-label="PACE link fallback information"
+                                                    className="text-muted-foreground hover:text-foreground"
+                                                  >
+                                                    <CircleHelp className="size-3" />
+                                                  </button>
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                  Direct PACE experiment link not found. Search
+                                                  results may still contain this run.
+                                                </TooltipContent>
+                                              </Tooltip>
+                                            </TooltipProvider>
+                                          ) : null}
+                                        </>
+                                      }
+                                    />
+                                  ) : null}
+                                </ExternalResourceGroup>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="rounded-lg border border-dashed px-4 py-6 text-sm text-muted-foreground">
+                            No external resources available yet.
+                          </div>
+                        )}
                       </div>
                     </>
                   )}

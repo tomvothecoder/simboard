@@ -60,6 +60,7 @@ export interface CaseSummaryOut {
   simulations: SimulationSummaryOut[];
   machineNames: string[];
   hpcUsernames: string[];
+  links: ExternalLinkOut[];
   createdAt: string;
   updatedAt: string;
 }
@@ -80,7 +81,9 @@ export const CASE_EDITABLE_FIELDS = [
 
 export type CaseEditableField = (typeof CASE_EDITABLE_FIELDS)[number];
 
-export type CaseUpdate = Partial<Record<CaseEditableField, string | null>>;
+export type CaseUpdate = Partial<Record<CaseEditableField, string | null>> & {
+  links?: ExternalLinkIn[];
+};
 
 /**
  * Lightweight simulation summary for case-level nesting.
@@ -207,7 +210,7 @@ export interface SimulationOut extends SimulationCreate {
   // Relationships
   // ~~~~~~~~~~~~~~
   artifacts: ArtifactOut[];
-  links: ExternalLinkOut[];
+  links: ExternalLinkOut[]; // merged simulation-owned + case-owned links, with ownerType metadata
   machine: Machine;
 
   // Computed fields

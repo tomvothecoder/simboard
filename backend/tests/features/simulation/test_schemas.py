@@ -1,4 +1,6 @@
 from datetime import datetime
+from types import SimpleNamespace
+from typing import Any, cast
 from uuid import uuid4
 
 import pytest
@@ -24,6 +26,11 @@ from app.features.simulation.schemas import (
     _normalize_optional_text,
 )
 from app.features.user.schemas import UserPreview
+
+
+def _populate_external_link_owner_type(value: Any) -> Any:
+    validator = cast(classmethod, ExternalLinkOut.__dict__["populate_owner_type"])
+    return validator.__func__(ExternalLinkOut, value)
 
 
 class TestSimulationCreateSchema:
@@ -244,6 +251,9 @@ class TestCaseUpdateSchema:
 
         assert _normalize_optional_text(marker) is marker
 
+    def test_update_link_validator_accepts_none_when_called_directly(self):
+        assert CaseUpdate.validate_update_links(None) is None
+
     def test_omitted_fields_produce_empty_patch(self):
         update = CaseUpdate()
 
@@ -274,6 +284,168 @@ class TestCaseUpdateSchema:
     def test_rejects_out_of_scope_fields(self):
         with pytest.raises(ValidationError):
             CaseUpdate(caseName="new-case")
+
+
+class TestExternalLinkOutSchema:
+    def test_populate_owner_type_returns_dict_when_owner_type_already_present(self):
+        payload = {
+            "id": uuid4(),
+            "owner_type": "simulation",
+        }
+
+        assert _populate_external_link_owner_type(payload) is payload
+
+    def test_populate_owner_type_sets_simulation_owner_for_dict_input(self):
+        payload = {
+            "id": uuid4(),
+            "simulation_id": uuid4(),
+        }
+
+        assert _populate_external_link_owner_type(payload) == {
+            **payload,
+            "owner_type": "simulation",
+        }
+
+    def test_populate_owner_type_sets_case_owner_for_dict_input(self):
+        payload = {
+            "id": uuid4(),
+            "caseId": uuid4(),
+        }
+
+        assert _populate_external_link_owner_type(payload) == {
+            **payload,
+            "owner_type": "case",
+        }
+
+    def test_populate_owner_type_returns_dict_unchanged_without_owner_source(self):
+        payload = {"id": uuid4()}
+
+        assert _populate_external_link_owner_type(payload) is payload
+
+    def test_populate_owner_type_returns_attributes_unchanged_when_owner_present(self):
+        link = SimpleNamespace(owner_type="case")
+
+        assert _populate_external_link_owner_type(link) is link
+
+    def test_populate_owner_type_returns_attributes_unchanged_without_owner_source(
+        self,
+    ):
+        link = SimpleNamespace(simulation_id=None, case_id=None)
+
+        assert _populate_external_link_owner_type(link) is link
+
+    def test_accepts_dict_with_explicit_owner_type(self):
+        payload = {
+            "id": uuid4(),
+            "kind": ExternalLinkKind.DIAGNOSTIC,
+            "url": "https://example.com/explicit-owner-type",
+            "label": "Explicit owner type",
+            "owner_type": "simulation",
+            "created_at": datetime(2023, 1, 1, 0, 0, 0),
+            "updated_at": datetime(2023, 1, 2, 0, 0, 0),
+        }
+
+        link_out = ExternalLinkOut.model_validate(payload)
+
+        assert link_out.owner_type == "simulation"
+
+    def test_populates_simulation_owner_type_from_snake_case_dict(self):
+        payload = {
+            "id": uuid4(),
+            "kind": ExternalLinkKind.DIAGNOSTIC,
+            "url": "https://example.com/simulation-dict",
+            "label": "Simulation dict",
+            "simulation_id": uuid4(),
+            "created_at": datetime(2023, 1, 1, 0, 0, 0),
+            "updated_at": datetime(2023, 1, 2, 0, 0, 0),
+        }
+
+        link_out = ExternalLinkOut.model_validate(payload)
+
+        assert link_out.owner_type == "simulation"
+
+    def test_populates_case_owner_type_from_camel_case_dict(self):
+        payload = {
+            "id": uuid4(),
+            "kind": ExternalLinkKind.DIAGNOSTIC,
+            "url": "https://example.com/case-dict",
+            "label": "Case dict",
+            "caseId": uuid4(),
+            "createdAt": datetime(2023, 1, 1, 0, 0, 0),
+            "updatedAt": datetime(2023, 1, 2, 0, 0, 0),
+        }
+
+        link_out = ExternalLinkOut.model_validate(payload)
+
+        assert link_out.owner_type == "case"
+
+    def test_accepts_attributes_with_existing_owner_type(self):
+        link = SimpleNamespace(
+            id=uuid4(),
+            kind=ExternalLinkKind.DIAGNOSTIC,
+            url="https://example.com/prepopulated-owner-type",
+            label="Prepopulated owner type",
+            owner_type="case",
+            simulation_id=None,
+            case_id=uuid4(),
+            created_at=datetime(2023, 1, 1, 0, 0, 0),
+            updated_at=datetime(2023, 1, 2, 0, 0, 0),
+        )
+
+        link_out = ExternalLinkOut.model_validate(link)
+
+        assert link_out.owner_type == "case"
+
+    def test_rejects_links_without_any_owner_type_source(self):
+        link = SimpleNamespace(
+            id=uuid4(),
+            kind=ExternalLinkKind.DIAGNOSTIC,
+            url="https://example.com/missing-owner",
+            label="Missing owner",
+            simulation_id=None,
+            case_id=None,
+            created_at=datetime(2023, 1, 1, 0, 0, 0),
+            updated_at=datetime(2023, 1, 2, 0, 0, 0),
+        )
+
+        with pytest.raises(ValidationError):
+            ExternalLinkOut.model_validate(link)
+
+    def test_validates_simulation_owned_external_link_from_attributes(self):
+        link = SimpleNamespace(
+            id=uuid4(),
+            kind=ExternalLinkKind.DIAGNOSTIC,
+            url="https://example.com/simulation-owned",
+            label="Simulation-owned",
+            simulation_id=uuid4(),
+            case_id=None,
+            created_at=datetime(2023, 1, 1, 0, 0, 0),
+            updated_at=datetime(2023, 1, 2, 0, 0, 0),
+        )
+
+        link_out = ExternalLinkOut.model_validate(link)
+
+        assert link_out.url == HttpUrl("https://example.com/simulation-owned")
+        assert link_out.label == "Simulation-owned"
+        assert link_out.owner_type == "simulation"
+
+    def test_validates_case_owned_external_link_from_attributes(self):
+        link = SimpleNamespace(
+            id=uuid4(),
+            kind=ExternalLinkKind.DIAGNOSTIC,
+            url="https://example.com/case-owned",
+            label="Case-owned",
+            simulation_id=None,
+            case_id=uuid4(),
+            created_at=datetime(2023, 1, 1, 0, 0, 0),
+            updated_at=datetime(2023, 1, 2, 0, 0, 0),
+        )
+
+        link_out = ExternalLinkOut.model_validate(link)
+
+        assert link_out.url == HttpUrl("https://example.com/case-owned")
+        assert link_out.label == "Case-owned"
+        assert link_out.owner_type == "case"
 
 
 class TestSimulationOutSchema:
@@ -434,6 +606,7 @@ class TestSimulationOutSchema:
                     "kind": "diagnostic",
                     "url": HttpUrl("http://example.com/link1"),
                     "label": "link1",
+                    "owner_type": "simulation",
                     "id": uuid4(),
                     "created_at": datetime(2023, 1, 1, 0, 0, 0),
                     "updated_at": datetime(2023, 1, 2, 0, 0, 0),
@@ -574,6 +747,7 @@ class TestSimulationOutSchema:
                     kind=ExternalLinkKind.DIAGNOSTIC,
                     url=HttpUrl("http://example.com/link1"),
                     label="link1",
+                    owner_type="simulation",
                     id=uuid4(),
                     created_at=datetime(2023, 1, 1, 0, 0, 0),
                     updated_at=datetime(2023, 1, 2, 0, 0, 0),
@@ -582,6 +756,7 @@ class TestSimulationOutSchema:
                     kind=ExternalLinkKind.PERFORMANCE,
                     url=HttpUrl("http://example.com/link2"),
                     label="link2",
+                    owner_type="simulation",
                     id=uuid4(),
                     created_at=datetime(2023, 1, 1, 0, 0, 0),
                     updated_at=datetime(2023, 1, 2, 0, 0, 0),
@@ -667,6 +842,7 @@ class TestCaseSchemas:
             ],
             machine_names=["chrysalis"],
             hpc_usernames=["ac.tvo"],
+            links=[],
             created_at=datetime(2023, 1, 1, 0, 0, 0),
             updated_at=datetime(2023, 1, 2, 0, 0, 0),
         )
@@ -690,6 +866,7 @@ class TestCaseSchemas:
             simulations=[],
             machine_names=[],
             hpc_usernames=[],
+            links=[],
             created_at=datetime(2023, 1, 1, 0, 0, 0),
             updated_at=datetime(2023, 1, 2, 0, 0, 0),
         )
@@ -697,3 +874,7 @@ class TestCaseSchemas:
         assert case_out.key_features == "Shared features"
         assert case_out.known_issues == "Shared known issues"
         assert case_out.notes_markdown == "## Notes"
+        assert case_out.simulations == []
+        assert case_out.machine_names == []
+        assert case_out.hpc_usernames == []
+        assert case_out.links == []
