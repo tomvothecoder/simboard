@@ -202,7 +202,13 @@ class TestSnapshotHelpers:
         assert SNAPSHOT_TRUNCATED_CAVEAT in exc_info.value.snapshot.snapshot_caveats
 
     def test_build_snapshot_merges_case_links_with_simulation_precedence(self) -> None:
-        case = Case(id=uuid4(), name="snapshot-case", case_group="snapshot-group")
+        case = Case(
+            id=uuid4(),
+            name="snapshot-case",
+            machine_id=uuid4(),
+            hpc_username="snapshot-user",
+            case_group="snapshot-group",
+        )
         simulation = Simulation(
             id=uuid4(),
             case=case,
@@ -215,7 +221,6 @@ class TestSnapshotHelpers:
             simulation_type=SimulationType.EXPERIMENTAL,
             status=SimulationStatus.COMPLETED,
             initialization_type="startup",
-            machine_id=uuid4(),
             simulation_start_date=datetime(2024, 1, 1, tzinfo=UTC),
             created_by=uuid4(),
             last_updated_by=uuid4(),

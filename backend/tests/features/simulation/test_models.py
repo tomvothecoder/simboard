@@ -17,7 +17,8 @@ from app.features.simulation.models import Case, ExternalLink, Simulation
 
 
 def _create_case(db: Session, name: str = "external-link-case") -> Case:
-    case = Case(name=name)
+    machine = _create_machine(db)
+    case = Case(name=name, machine_id=machine.id, hpc_username="test-user")
     db.add(case)
     db.flush()
     return case
@@ -58,7 +59,6 @@ def _create_simulation(
     db: Session,
     *,
     case_id: UUID,
-    machine_id: UUID,
     ingestion_id: UUID,
     user_id: UUID,
     execution_id: str,
@@ -73,7 +73,6 @@ def _create_simulation(
         simulation_type=SimulationType.EXPERIMENTAL,
         status=SimulationStatus.CREATED,
         initialization_type="startup",
-        machine_id=machine_id,
         simulation_start_date=datetime(2023, 1, 1, tzinfo=timezone.utc),
         created_by=user_id,
         last_updated_by=user_id,
@@ -100,7 +99,6 @@ class TestExternalLinkOwnership:
         simulation = _create_simulation(
             db,
             case_id=case.id,
-            machine_id=machine.id,
             ingestion_id=ingestion.id,
             user_id=normal_user_sync["id"],
             execution_id="simulation-owned-exec",
@@ -170,7 +168,6 @@ class TestExternalLinkOwnership:
         simulation = _create_simulation(
             db,
             case_id=case.id,
-            machine_id=machine.id,
             ingestion_id=ingestion.id,
             user_id=normal_user_sync["id"],
             execution_id="dual-owned-exec",
