@@ -430,6 +430,7 @@ class TestCreateSimulation:
 
         res = client.post(f"{API_BASE}/simulations", json=payload)
         assert res.status_code == 400
+        assert res.json() == {"detail": f"Case '{payload['caseId']}' not found."}
 
 
 class TestUpdateCase:

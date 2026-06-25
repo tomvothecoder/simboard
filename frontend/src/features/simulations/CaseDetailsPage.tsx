@@ -169,7 +169,7 @@ const toEditableFormState = (caseRecord: CaseDetailOut): EditableFormState => ({
 
 const normalizeEditableValue = (value: string): string | null => {
   const trimmed = value.trim();
-  return trimmed ? value : null;
+  return trimmed || null;
 };
 
 const buildUpdatePayload = (caseRecord: CaseDetailOut, formState: EditableFormState): CaseUpdate => {
@@ -341,6 +341,14 @@ export const CaseDetailsPage = ({
       : filteredFlatSimulations.length > SCROLLABLE_FLAT_ROWS_THRESHOLD;
 
   useEffect(() => {
+    if (loading || (fetchedCaseRecord && fetchedCaseRecord.id !== id)) {
+      setCaseRecord(null);
+      setFormState(null);
+      setIsEditing(false);
+      setSaveError(null);
+      return;
+    }
+
     if (fetchedCaseRecord && fetchedCaseRecord.id === id) {
       setCaseRecord(fetchedCaseRecord);
       setFormState(toEditableFormState(fetchedCaseRecord));
@@ -352,6 +360,8 @@ export const CaseDetailsPage = ({
     if (!loading && !error) {
       setCaseRecord(null);
       setFormState(null);
+      setIsEditing(false);
+      setSaveError(null);
     }
   }, [error, fetchedCaseRecord, id, loading]);
 
@@ -459,7 +469,7 @@ export const CaseDetailsPage = ({
     );
   }
 
-  if (loading) {
+  if (loading || (caseRecord != null && caseRecord.id !== id)) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="text-center text-gray-500">Loading case details…</div>
