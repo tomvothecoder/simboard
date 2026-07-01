@@ -130,7 +130,13 @@ def test_discover_case_executions_tracks_rejected_only_cases_for_logging(
     )
 
     assert grouped == {}
-    assert logged_events == []
+    assert logged_events[0] == (
+        "archive_scan_started",
+        {"archive_root": str(archive_root)},
+    )
+    assert logged_events[1][0] == "archive_scan_completed"
+    assert logged_events[1][1]["archive_root"] == str(archive_root)
+    assert logged_events[1][1]["discovered_cases"] == 0
     case_log = case_collection_data[str((archive_root / "case_a").resolve())]
     assert case_log.execution_count_total == total_skips
     assert case_log.valid_execution_ids == set()
@@ -138,6 +144,65 @@ def test_discover_case_executions_tracks_rejected_only_cases_for_logging(
         decision.execution_id for decision in case_log.rejected_decisions
     ) == [f"{100 + index}.1-1" for index in range(total_skips)]
     assert {decision.detail for decision in case_log.rejected_decisions} == {"missing"}
+
+
+def test_discover_case_executions_logs_scan_progress(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "archive"
+    for index in range(3):
+        (archive_root / f"case_{index}" / f"{100 + index}.1-1").mkdir(parents=True)
+
+    logged_events: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(
+        ingestor_module, "DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES", 2
+    )
+
+    grouped = _discover_case_executions(archive_root, metadata_locator=lambda *_: {})
+
+    assert len(grouped) == 3
+
+    archive_root_path = str(archive_root)
+    start_events = [
+        fields for event, fields in logged_events if event == "archive_scan_started"
+    ]
+    progress_events = [
+        fields for event, fields in logged_events if event == "archive_scan_progress"
+    ]
+    completed_events = [
+        fields for event, fields in logged_events if event == "archive_scan_completed"
+    ]
+
+    assert start_events == [{"archive_root": archive_root_path}]
+    assert len(progress_events) == 3
+    assert progress_events[0]["archive_root"] == archive_root_path
+    assert progress_events[0]["directories_visited"] == 2
+    assert progress_events[0]["discovered_cases"] == 1
+    assert progress_events[0]["execution_dirs_scanned"] == 1
+    assert progress_events[0]["execution_dirs_accepted"] == 1
+    assert progress_events[1]["archive_root"] == archive_root_path
+    assert progress_events[1]["directories_visited"] == 4
+    assert progress_events[1]["discovered_cases"] == 2
+    assert progress_events[1]["execution_dirs_scanned"] == 2
+    assert progress_events[1]["execution_dirs_accepted"] == 2
+    assert progress_events[2]["archive_root"] == archive_root_path
+    assert progress_events[2]["directories_visited"] == 6
+    assert progress_events[2]["discovered_cases"] == 3
+    assert progress_events[2]["execution_dirs_scanned"] == 3
+    assert progress_events[2]["execution_dirs_accepted"] == 3
+
+    assert len(completed_events) == 1
+    assert completed_events[0]["archive_root"] == archive_root_path
+    assert completed_events[0]["directories_visited"] == 7
+    assert completed_events[0]["discovered_cases"] == 3
+    assert completed_events[0]["execution_dirs_scanned"] == 3
+    assert completed_events[0]["execution_dirs_accepted"] == 3
 
 
 def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(

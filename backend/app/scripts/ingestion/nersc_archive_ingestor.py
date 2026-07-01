@@ -14,12 +14,29 @@ Each run executes four phases:
 
 Runner terms used heavily in this module and its logs:
 
-  - submission-qualified case: case with at least one newly discovered complete
-    execution ID
-  - selected submission case: submission-qualified case actually chosen for this
-    run after any ``MAX_CASES_PER_RUN`` cap
-  - deferred execution: newly discovered complete execution ID not selected this
-    run because per-run capping stopped earlier selection
+  - submission-qualified case / ``submission_qualified_cases``: case count with
+    at least one newly discovered complete execution before per-run capping
+  - selected submission case / ``selected_submission_cases``:
+    submission-qualified case count actually chosen for the current run after
+    any ``MAX_CASES_PER_RUN`` cap
+  - ``execution_dirs_scanned``: execution directory count whose names matched
+    the execution pattern and were sent through discovery validation
+  - ``execution_dirs_accepted``: scanned execution directory count that passed
+    validation and were retained as valid discovered executions
+  - ``skipped_incomplete``: execution directory count rejected during discovery
+    because required metadata files or fields were missing or incomplete
+  - ``skipped_invalid``: execution directory count rejected during discovery
+    because metadata was invalid or the directory could not be read
+  - ``accepted_execution_ids``: valid discovered execution ID count that was
+    both new and selected for the current run
+  - ``rejected_existing_execution_ids``: valid discovered execution ID count
+    already present in stored processed state
+  - ``rejected_incomplete_execution_ids``: execution ID count rejected during
+    discovery as incomplete
+  - ``rejected_invalid_execution_ids``: execution ID count rejected during
+    discovery as invalid or unreadable
+  - deferred execution / ``deferred_execution_ids``: new valid execution ID
+    count not selected because per-run case capping stopped earlier selection
   - ``processed_execution_ids``: known execution IDs submitted for one case
 
 Canonical definitions live in ``docs/architecture/metadata-ingestion.md``.
@@ -62,6 +79,7 @@ DEFAULT_MACHINE_NAME = "perlmutter"
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_TIMEOUT_SECONDS = 60
 MAX_DRY_RUN_CANDIDATE_LOGS = 20
+DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES = 250
 
 
 @dataclass(frozen=True)
@@ -87,13 +105,21 @@ class IngestionCandidate:
 class IngestorConfig:
     """Runtime configuration for the ingestion runner."""
 
+    # API endpoint and token for ingestion requests.
     api_base_url: str
+    #  Bearer token for SimBoard API authentication.
     api_token: str
+    # Absolute path to the mounted performance archive root.
     archive_root: Path
+    # Name of the machine being scanned (used for state persistence).
     machine_name: str
+    # Whether to perform a dry-run scan without ingestion requests.
     dry_run: bool
+    # Optional cap on the number of cases to submit per run.
     max_cases_per_run: int | None
+    # Maximum number of attempts for each ingestion request.
     max_attempts: int
+    # Timeout in seconds for each ingestion request.
     request_timeout_seconds: int
 
 
@@ -523,9 +549,16 @@ def _discover_case_executions(
         Mapping of absolute case directory paths to sorted execution IDs.
     """
     grouped: dict[str, set[str]] = {}
-    _initialize_discovery_stats(stats)
+    effective_stats = stats if stats is not None else _new_discovery_stats()
+    _initialize_discovery_stats(effective_stats)
+    scan_started_at = time.monotonic()
+    directories_visited = 0
+    archive_root_str = str(archive_root)
+
+    _log_event("archive_scan_started", {"archive_root": archive_root_str})
 
     for dirpath, dirnames, _ in os.walk(archive_root):
+        directories_visited += 1
         case_dir = Path(dirpath)
         for dirname in dirnames:
             if not EXECUTION_DIR_PATTERN.fullmatch(dirname):
@@ -536,11 +569,57 @@ def _discover_case_executions(
                 case_dir,
                 dirname,
                 metadata_locator=metadata_locator,
-                stats=stats,
+                stats=effective_stats,
                 case_collection_data=case_collection_data,
             )
 
+        if directories_visited % DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES == 0:
+            _log_archive_scan_progress(
+                event="archive_scan_progress",
+                archive_root=archive_root_str,
+                directories_visited=directories_visited,
+                grouped=grouped,
+                stats=effective_stats,
+                started_at=scan_started_at,
+            )
+
+    _log_archive_scan_progress(
+        event="archive_scan_completed",
+        archive_root=archive_root_str,
+        directories_visited=directories_visited,
+        grouped=grouped,
+        stats=effective_stats,
+        started_at=scan_started_at,
+    )
+
     return {case_path: sorted(exec_ids) for case_path, exec_ids in grouped.items()}
+
+
+def _log_archive_scan_progress(
+    *,
+    event: str,
+    archive_root: str,
+    directories_visited: int,
+    grouped: dict[str, set[str]],
+    stats: DiscoveryStats | None,
+    started_at: float,
+) -> None:
+    """Emit a structured archive-scan progress or completion log."""
+    _log_event(
+        event,
+        {
+            "archive_root": archive_root,
+            "directories_visited": directories_visited,
+            "discovered_cases": len(grouped),
+            "execution_dirs_scanned": (
+                0 if stats is None else stats["execution_dirs_scanned"]
+            ),
+            "execution_dirs_accepted": (
+                0 if stats is None else stats["execution_dirs_accepted"]
+            ),
+            "duration_seconds": round(time.monotonic() - started_at, 3),
+        },
+    )
 
 
 def _initialize_discovery_stats(stats: DiscoveryStats | None) -> None:
@@ -1663,7 +1742,7 @@ def _log_event(event: str, fields: dict[str, Any] | None = None) -> None:
         Additional event fields serialized into key-value pairs.
     """
     fields = {} if fields is None else fields
-    parts = [f"ts={_utc_now_iso()}", f"event={event}"]
+    parts = [f"event={event}"]
 
     for key in sorted(fields):
         parts.append(f"{key}={_render_log_value(fields[key])}")

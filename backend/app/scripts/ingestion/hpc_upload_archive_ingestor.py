@@ -7,12 +7,29 @@ temporary ``.tar.gz`` archive and uploads it to the dedicated
 
 Runner terms used heavily in this module and shared helper logs:
 
-  - submission-qualified case: case with at least one newly discovered complete
-    execution ID
-  - selected submission case: submission-qualified case actually chosen for this
-    run after any ``MAX_CASES_PER_RUN`` cap
-  - deferred execution: newly discovered complete execution ID not selected this
-    run because per-run capping stopped earlier selection
+  - submission-qualified case / ``submission_qualified_cases``: case count with
+    at least one newly discovered complete execution before per-run capping
+  - selected submission case / ``selected_submission_cases``:
+    submission-qualified case count actually chosen for the current run after
+    any ``MAX_CASES_PER_RUN`` cap
+  - ``execution_dirs_scanned``: execution directory count whose names matched
+    the execution pattern and were sent through discovery validation
+  - ``execution_dirs_accepted``: scanned execution directory count that passed
+    validation and were retained as valid discovered executions
+  - ``skipped_incomplete``: execution directory count rejected during discovery
+    because required metadata files or fields were missing or incomplete
+  - ``skipped_invalid``: execution directory count rejected during discovery
+    because metadata was invalid or the directory could not be read
+  - ``accepted_execution_ids``: valid discovered execution ID count that was
+    both new and selected for the current run
+  - ``rejected_existing_execution_ids``: valid discovered execution ID count
+    already present in stored processed state
+  - ``rejected_incomplete_execution_ids``: execution ID count rejected during
+    discovery as incomplete
+  - ``rejected_invalid_execution_ids``: execution ID count rejected during
+    discovery as invalid or unreadable
+  - deferred execution / ``deferred_execution_ids``: new valid execution ID
+    count not selected because per-run case capping stopped earlier selection
   - ``processed_execution_ids``: known execution IDs submitted for one case
 
 Canonical definitions live in ``docs/architecture/metadata-ingestion.md``.
