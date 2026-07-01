@@ -12,6 +12,10 @@ from typing import Any
 import pytest
 
 from app.api.version import API_BASE
+from app.features.ingestion.parsers.parser import (
+    ArchiveValidationError,
+    IncompleteArchiveError,
+)
 from app.scripts.ingestion import nersc_archive_ingestor as ingestor_module
 from app.scripts.ingestion.nersc_archive_ingestor import (
     CaseScanResult,
@@ -29,7 +33,6 @@ from app.scripts.ingestion.nersc_archive_ingestor import (
     _fresh_state,
     _ingest_case_with_retries,
     _is_transient_status,
-    _log_execution_skip_detail,
     _log_startup_configuration,
     _log_summary_table,
     _normalize_remote_state,
@@ -103,7 +106,7 @@ def test_discover_case_executions_skips_unreadable_execution_dirs(
     assert stats["skipped_invalid"] == 1
 
 
-def test_discover_case_executions_logs_all_rejected_skips(
+def test_discover_case_executions_tracks_rejected_only_cases_for_logging(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -119,45 +122,25 @@ def test_discover_case_executions_logs_all_rejected_skips(
 
     monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
 
+    case_collection_data: dict[str, ingestor_module.CaseCollectionLogData] = {}
     grouped = _discover_case_executions(
         archive_root,
         metadata_locator=lambda *_: (_ for _ in ()).throw(FileNotFoundError("missing")),
+        case_collection_data=case_collection_data,
     )
 
     assert grouped == {}
-    rejected_decisions = [
-        fields
-        for event, fields in logged_events
-        if event == "execution_collection_decision"
-    ]
-    assert len(rejected_decisions) == total_skips
-    assert {
-        (
-            fields["case_path"],
-            fields["decision"],
-            fields["execution_id"],
-            fields["error"],
-            fields["reason"],
-        )
-        for fields in rejected_decisions
-    } == {
-        (
-            str((archive_root / "case_a").resolve()),
-            "rejected",
-            f"{100 + index}.1-1",
-            "missing",
-            "incomplete",
-        )
-        for index in range(total_skips)
-    }
-    assert not [
-        fields
-        for event, fields in logged_events
-        if event == "execution_skip_logs_suppressed"
-    ]
+    assert logged_events == []
+    case_log = case_collection_data[str((archive_root / "case_a").resolve())]
+    assert case_log.execution_count_total == total_skips
+    assert case_log.valid_execution_ids == set()
+    assert sorted(
+        decision.execution_id for decision in case_log.rejected_decisions
+    ) == [f"{100 + index}.1-1" for index in range(total_skips)]
+    assert {decision.detail for decision in case_log.rejected_decisions} == {"missing"}
 
 
-def test_run_ingestor_logs_execution_collection_outcomes_for_state_and_limit(
+def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -202,8 +185,103 @@ def test_run_ingestor_logs_execution_collection_outcomes_for_state_and_limit(
         for event, fields in logged_events
         if event == "execution_collection_decision"
     ]
+    case_begins = [
+        fields for event, fields in logged_events if event == "case_collection_begin"
+    ]
+    case_summaries = [
+        fields for event, fields in logged_events if event == "case_collection_summary"
+    ]
+    case_block_events = [
+        (event, fields)
+        for event, fields in logged_events
+        if event
+        in {
+            "case_collection_begin",
+            "execution_collection_decision",
+            "case_collection_summary",
+        }
+    ]
 
     assert exit_code == 0
+    assert case_block_events == [
+        (
+            "case_collection_begin",
+            {
+                "case_path": str(case_a.resolve()),
+                "execution_count_total": 2,
+                "execution_count_valid": 2,
+                "execution_count_rejected_incomplete": 0,
+                "execution_count_rejected_invalid": 0,
+                "execution_count_existing": 1,
+                "execution_count_new": 1,
+                "execution_count_selected_new": 1,
+                "execution_count_deferred": 0,
+            },
+        ),
+        (
+            "execution_collection_decision",
+            {
+                "case_path": str(case_a.resolve()),
+                "decision": "rejected",
+                "execution_id": "100.1-1",
+                "reason": "already_processed",
+            },
+        ),
+        (
+            "execution_collection_decision",
+            {
+                "case_path": str(case_a.resolve()),
+                "decision": "accepted",
+                "execution_id": "101.1-1",
+                "reason": "new_execution",
+            },
+        ),
+        (
+            "case_collection_summary",
+            {
+                "case_path": str(case_a.resolve()),
+                "accepted": 1,
+                "rejected_existing": 1,
+                "rejected_incomplete": 0,
+                "rejected_invalid": 0,
+                "deferred": 0,
+            },
+        ),
+        (
+            "case_collection_begin",
+            {
+                "case_path": str(case_b.resolve()),
+                "execution_count_total": 1,
+                "execution_count_valid": 1,
+                "execution_count_rejected_incomplete": 0,
+                "execution_count_rejected_invalid": 0,
+                "execution_count_existing": 0,
+                "execution_count_new": 1,
+                "execution_count_selected_new": 0,
+                "execution_count_deferred": 1,
+            },
+        ),
+        (
+            "execution_collection_decision",
+            {
+                "case_path": str(case_b.resolve()),
+                "decision": "deferred",
+                "execution_id": "200.1-1",
+                "reason": "max_cases_per_run",
+            },
+        ),
+        (
+            "case_collection_summary",
+            {
+                "case_path": str(case_b.resolve()),
+                "accepted": 0,
+                "rejected_existing": 0,
+                "rejected_incomplete": 0,
+                "rejected_invalid": 0,
+                "deferred": 1,
+            },
+        ),
+    ]
     assert decisions == [
         {
             "case_path": str(case_a.resolve()),
@@ -224,6 +302,8 @@ def test_run_ingestor_logs_execution_collection_outcomes_for_state_and_limit(
             "reason": "max_cases_per_run",
         },
     ]
+    assert len(case_begins) == 2
+    assert len(case_summaries) == 2
     scan_completed = [
         fields for event, fields in logged_events if event == "scan_completed"
     ][0]
@@ -336,14 +416,21 @@ def test_validate_execution_dir_counts_incomplete_with_stats(tmp_path: Path) -> 
     (case_dir / "100.1-1").mkdir(parents=True)
     stats = ingestor_module._new_discovery_stats()
 
-    valid = _validate_execution_dir(
+    decision = _validate_execution_dir(
         case_dir,
         "100.1-1",
         metadata_locator=lambda *_: (_ for _ in ()).throw(FileNotFoundError("missing")),
         stats=stats,
     )
 
-    assert valid is False
+    assert decision is not None
+    assert decision.to_log_fields() == {
+        "case_path": str(case_dir.resolve()),
+        "decision": "rejected",
+        "execution_id": "100.1-1",
+        "reason": "incomplete",
+        "detail": "missing",
+    }
     assert stats["skipped_incomplete"] == 1
     assert stats["rejected_incomplete_execution_ids"] == 1
 
@@ -353,14 +440,21 @@ def test_validate_execution_dir_counts_value_error_with_stats(tmp_path: Path) ->
     (case_dir / "100.1-1").mkdir(parents=True)
     stats = ingestor_module._new_discovery_stats()
 
-    valid = _validate_execution_dir(
+    decision = _validate_execution_dir(
         case_dir,
         "100.1-1",
         metadata_locator=lambda *_: (_ for _ in ()).throw(ValueError("invalid")),
         stats=stats,
     )
 
-    assert valid is False
+    assert decision is not None
+    assert decision.to_log_fields() == {
+        "case_path": str(case_dir.resolve()),
+        "decision": "rejected",
+        "execution_id": "100.1-1",
+        "reason": "invalid",
+        "detail": "invalid",
+    }
     assert stats["skipped_invalid"] == 1
     assert stats["rejected_invalid_execution_ids"] == 1
 
@@ -1479,7 +1573,237 @@ def test_render_log_value_formats_values() -> None:
     assert _render_log_value({"b": 1, "a": 2}) == '{"a": 2, "b": 1}'
 
 
-def test_log_execution_skip_detail_emits_normalized_decision(monkeypatch) -> None:
+def test_validate_execution_dir_compacts_incomplete_archive_errors(
+    tmp_path: Path,
+) -> None:
+    case_dir = tmp_path / "case_a"
+    (case_dir / "100.1-1").mkdir(parents=True)
+    stats = ingestor_module._new_discovery_stats()
+
+    decision = _validate_execution_dir(
+        case_dir,
+        "100.1-1",
+        metadata_locator=lambda *_: (_ for _ in ()).throw(
+            IncompleteArchiveError(
+                [
+                    {
+                        "code": "missing_required_file",
+                        "file_spec": "env_run.xml..*",
+                        "message": "missing env_run",
+                    },
+                    {
+                        "code": "missing_required_file",
+                        "file_spec": "README.case..*.gz",
+                        "message": "missing readme",
+                    },
+                ]
+            )
+        ),
+        stats=stats,
+    )
+
+    assert decision is not None
+    assert decision.to_log_fields() == {
+        "case_path": str(case_dir.resolve()),
+        "decision": "rejected",
+        "execution_id": "100.1-1",
+        "reason": "incomplete",
+        "error_count": 2,
+        "error_codes": ["missing_required_file"],
+        "missing_file_specs": ["README.case..*.gz", "env_run.xml..*"],
+    }
+    assert stats["skipped_incomplete"] == 1
+
+
+def test_validate_execution_dir_compacts_archive_validation_errors(
+    tmp_path: Path,
+) -> None:
+    case_dir = tmp_path / "case_a"
+    (case_dir / "100.1-1").mkdir(parents=True)
+    stats = ingestor_module._new_discovery_stats()
+
+    decision = _validate_execution_dir(
+        case_dir,
+        "100.1-1",
+        metadata_locator=lambda *_: (_ for _ in ()).throw(
+            ArchiveValidationError(
+                [
+                    {
+                        "code": "multiple_matching_files",
+                        "file_spec": "CaseStatus..*.gz",
+                        "message": "too many files",
+                    },
+                    {
+                        "code": "missing_required_file",
+                        "file_spec": "env_run.xml..*",
+                        "message": "missing env_run",
+                    },
+                ]
+            )
+        ),
+        stats=stats,
+    )
+
+    assert decision is not None
+    assert decision.to_log_fields() == {
+        "case_path": str(case_dir.resolve()),
+        "decision": "rejected",
+        "execution_id": "100.1-1",
+        "reason": "invalid",
+        "error_count": 2,
+        "error_codes": ["missing_required_file", "multiple_matching_files"],
+        "missing_file_specs": ["env_run.xml..*"],
+    }
+    assert stats["skipped_invalid"] == 1
+
+
+def test_run_ingestor_logs_rejected_only_case_block(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    logged_events: list[tuple[str, dict[str, Any]]] = []
+    archive_root = tmp_path / "archive"
+    case_a = archive_root / "case_a"
+    case_b = archive_root / "case_b"
+    (case_a / "100.1-1").mkdir(parents=True)
+    (case_a / "101.1-1").mkdir(parents=True)
+    (case_b / "200.1-1").mkdir(parents=True)
+
+    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    def fake_locator(execution_dir: str) -> dict[str, str]:
+        if execution_dir.endswith("100.1-1"):
+            raise FileNotFoundError("missing")
+        if execution_dir.endswith("101.1-1"):
+            raise ValueError("bad metadata")
+        return {}
+
+    exit_code = _run_ingestor(config, metadata_locator=fake_locator)
+
+    case_block_events = [
+        (event, fields)
+        for event, fields in logged_events
+        if event
+        in {
+            "case_collection_begin",
+            "execution_collection_decision",
+            "case_collection_summary",
+        }
+    ]
+
+    assert exit_code == 0
+    assert case_block_events == [
+        (
+            "case_collection_begin",
+            {
+                "case_path": str(case_a.resolve()),
+                "execution_count_total": 2,
+                "execution_count_valid": 0,
+                "execution_count_rejected_incomplete": 1,
+                "execution_count_rejected_invalid": 1,
+                "execution_count_existing": 0,
+                "execution_count_new": 0,
+                "execution_count_selected_new": 0,
+                "execution_count_deferred": 0,
+            },
+        ),
+        (
+            "execution_collection_decision",
+            {
+                "case_path": str(case_a.resolve()),
+                "decision": "rejected",
+                "execution_id": "100.1-1",
+                "reason": "incomplete",
+                "detail": "missing",
+            },
+        ),
+        (
+            "execution_collection_decision",
+            {
+                "case_path": str(case_a.resolve()),
+                "decision": "rejected",
+                "execution_id": "101.1-1",
+                "reason": "invalid",
+                "detail": "bad metadata",
+            },
+        ),
+        (
+            "case_collection_summary",
+            {
+                "case_path": str(case_a.resolve()),
+                "accepted": 0,
+                "rejected_existing": 0,
+                "rejected_incomplete": 1,
+                "rejected_invalid": 1,
+                "deferred": 0,
+            },
+        ),
+        (
+            "case_collection_begin",
+            {
+                "case_path": str(case_b.resolve()),
+                "execution_count_total": 1,
+                "execution_count_valid": 1,
+                "execution_count_rejected_incomplete": 0,
+                "execution_count_rejected_invalid": 0,
+                "execution_count_existing": 0,
+                "execution_count_new": 1,
+                "execution_count_selected_new": 1,
+                "execution_count_deferred": 0,
+            },
+        ),
+        (
+            "execution_collection_decision",
+            {
+                "case_path": str(case_b.resolve()),
+                "decision": "accepted",
+                "execution_id": "200.1-1",
+                "reason": "new_execution",
+            },
+        ),
+        (
+            "case_collection_summary",
+            {
+                "case_path": str(case_b.resolve()),
+                "accepted": 1,
+                "rejected_existing": 0,
+                "rejected_incomplete": 0,
+                "rejected_invalid": 0,
+                "deferred": 0,
+            },
+        ),
+    ]
+    assert not any(
+        event in {"execution_skipped_incomplete", "execution_skipped_invalid"}
+        for event, _ in logged_events
+    )
+
+
+def test_run_ingestor_groups_case_logs_without_interleaving(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "archive"
+    case_b = archive_root / "case_b"
+    case_a = archive_root / "case_a"
+    (case_b / "200.1-1").mkdir(parents=True)
+    (case_b / "201.1-1").mkdir(parents=True)
+    (case_a / "100.1-1").mkdir(parents=True)
+    (case_a / "101.1-1").mkdir(parents=True)
+
     logged_events: list[tuple[str, dict[str, Any]]] = []
 
     def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
@@ -1487,34 +1811,31 @@ def test_log_execution_skip_detail_emits_normalized_decision(monkeypatch) -> Non
 
     monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
 
-    _log_execution_skip_detail(
-        "execution_skipped_incomplete",
-        "/archive/case_a",
-        "100.1-1",
-        "missing",
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
     )
 
-    assert logged_events == [
-        (
-            "execution_collection_decision",
-            {
-                "case_path": "/archive/case_a",
-                "decision": "rejected",
-                "execution_id": "100.1-1",
-                "error": "missing",
-                "reason": "incomplete",
-            },
-        ),
-        (
-            "execution_skipped_incomplete",
-            {
-                "case_path": "/archive/case_a",
-                "decision": "rejected",
-                "execution_id": "100.1-1",
-                "error": "missing",
-                "reason": "incomplete",
-            },
-        ),
+    exit_code = _run_ingestor(config, metadata_locator=lambda *_: {})
+
+    case_block_markers = [
+        (event, fields["case_path"])
+        for event, fields in logged_events
+        if event in {"case_collection_begin", "case_collection_summary"}
+    ]
+
+    assert exit_code == 0
+    assert case_block_markers == [
+        ("case_collection_begin", str(case_a.resolve())),
+        ("case_collection_summary", str(case_a.resolve())),
+        ("case_collection_begin", str(case_b.resolve())),
+        ("case_collection_summary", str(case_b.resolve())),
     ]
 
 

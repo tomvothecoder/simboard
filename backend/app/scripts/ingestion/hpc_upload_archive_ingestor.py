@@ -7,13 +7,13 @@ temporary ``.tar.gz`` archive and uploads it to the dedicated
 
 Runner terms used heavily in this module and shared helper logs:
 
-- submission-qualified case: case with at least one newly discovered complete
-  execution ID
-- selected submission case: submission-qualified case actually chosen for this
-  run after any ``MAX_CASES_PER_RUN`` cap
-- deferred execution: newly discovered complete execution ID not selected this
-  run because per-run capping stopped earlier selection
-- ``processed_execution_ids``: known execution IDs submitted for one case
+  - submission-qualified case: case with at least one newly discovered complete
+    execution ID
+  - selected submission case: submission-qualified case actually chosen for this
+    run after any ``MAX_CASES_PER_RUN`` cap
+  - deferred execution: newly discovered complete execution ID not selected this
+    run because per-run capping stopped earlier selection
+  - ``processed_execution_ids``: known execution IDs submitted for one case
 
 Canonical definitions live in ``docs/architecture/metadata-ingestion.md``.
 """
@@ -129,12 +129,7 @@ def _run_ingestor(
         candidates,
         submission_qualified_case_count,
         discovery_stats,
-        state,
-    ) = _scan_archive(
-        config,
-        state,
-        metadata_locator=metadata_locator,
-    )
+    ) = _scan_archive(config, state, metadata_locator=metadata_locator)
 
     _log_event(
         "scan_completed",
