@@ -45,7 +45,6 @@ DEFAULT_ARCHIVE_ROOT = "/performance_archive"
 DEFAULT_MACHINE_NAME = "perlmutter"
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_TIMEOUT_SECONDS = 60
-MAX_SKIP_DETAIL_LOGS = 20
 MAX_DRY_RUN_CANDIDATE_LOGS = 20
 
 
@@ -103,6 +102,11 @@ class DiscoveryStats(TypedDict):
     execution_dirs_accepted: int
     skipped_incomplete: int
     skipped_invalid: int
+    accepted_execution_ids: int
+    rejected_existing_execution_ids: int
+    rejected_incomplete_execution_ids: int
+    rejected_invalid_execution_ids: int
+    deferred_execution_ids: int
 
 
 class IngestionRequestResponse(TypedDict):
@@ -325,6 +329,17 @@ def _run_ingestor(
             "execution_dirs_accepted": discovery_stats["execution_dirs_accepted"],
             "skipped_incomplete": discovery_stats["skipped_incomplete"],
             "skipped_invalid": discovery_stats["skipped_invalid"],
+            "accepted_execution_ids": discovery_stats["accepted_execution_ids"],
+            "rejected_existing_execution_ids": discovery_stats[
+                "rejected_existing_execution_ids"
+            ],
+            "rejected_incomplete_execution_ids": discovery_stats[
+                "rejected_incomplete_execution_ids"
+            ],
+            "rejected_invalid_execution_ids": discovery_stats[
+                "rejected_invalid_execution_ids"
+            ],
+            "deferred_execution_ids": discovery_stats["deferred_execution_ids"],
         },
     )
 
@@ -394,9 +409,19 @@ def _scan_archive(
         config.archive_root, metadata_locator=metadata_locator, stats=discovery_stats
     )
     scan_results = _build_case_scan_results(grouped_executions)
-
-    candidates = _build_ingestion_candidates(
-        scan_results, state, max_cases_per_run=config.max_cases_per_run
+    all_candidates = _build_ingestion_candidates(
+        scan_results, state, max_cases_per_run=None
+    )
+    candidates = (
+        all_candidates
+        if config.max_cases_per_run is None
+        else all_candidates[: config.max_cases_per_run]
+    )
+    _log_execution_collection_outcomes(
+        scan_results,
+        state,
+        candidates,
+        discovery_stats,
     )
 
     return scan_results, candidates, discovery_stats, state
@@ -427,12 +452,16 @@ def _discover_case_executions(
         Mapping of absolute case directory paths to sorted execution IDs.
     """
     grouped: dict[str, set[str]] = {}
-    skip_log_state = {"logged": 0, "suppressed": 0}
     if stats is not None:
         stats.setdefault("execution_dirs_scanned", 0)
         stats.setdefault("execution_dirs_accepted", 0)
         stats.setdefault("skipped_incomplete", 0)
         stats.setdefault("skipped_invalid", 0)
+        stats.setdefault("accepted_execution_ids", 0)
+        stats.setdefault("rejected_existing_execution_ids", 0)
+        stats.setdefault("rejected_incomplete_execution_ids", 0)
+        stats.setdefault("rejected_invalid_execution_ids", 0)
+        stats.setdefault("deferred_execution_ids", 0)
 
     for dirpath, dirnames, _ in os.walk(archive_root):
         for dirname in dirnames:
@@ -447,22 +476,12 @@ def _discover_case_executions(
                 dirname,
                 metadata_locator=metadata_locator,
                 stats=stats,
-                skip_log_state=skip_log_state,
             ):
                 continue
 
             if stats is not None:
                 stats["execution_dirs_accepted"] += 1
             grouped.setdefault(str(case_dir.resolve()), set()).add(dirname)
-
-    if skip_log_state["suppressed"]:
-        _log_event(
-            "execution_skip_logs_suppressed",
-            {
-                "suppressed_count": skip_log_state["suppressed"],
-                "detail_log_limit": MAX_SKIP_DETAIL_LOGS,
-            },
-        )
 
     return {case_path: sorted(exec_ids) for case_path, exec_ids in grouped.items()}
 
@@ -472,7 +491,6 @@ def _validate_execution_dir(
     execution_id: str,
     metadata_locator: Callable[[str], object],
     stats: DiscoveryStats | None,
-    skip_log_state: dict[str, int],
 ) -> bool:
     """Validate execution directory metadata presence and log skips.
 
@@ -486,9 +504,6 @@ def _validate_execution_dir(
         Callable used to validate execution metadata files.
     stats : dict[str, int] | None
         Optional discovery stats accumulator.
-    skip_log_state : dict[str, int]
-        Mutable counters tracking logged and suppressed skip detail events.
-
     Returns
     -------
     bool
@@ -503,38 +518,115 @@ def _validate_execution_dir(
     except FileNotFoundError as exc:
         if stats is not None:
             stats["skipped_incomplete"] += 1
+            stats["rejected_incomplete_execution_ids"] += 1
 
         _log_execution_skip_detail(
             "execution_skipped_incomplete",
             case_path=str(case_dir.resolve()),
             execution_id=execution_id,
             error=str(exc),
-            skip_log_state=skip_log_state,
         )
     except ValueError as exc:
         if stats is not None:
             stats["skipped_invalid"] += 1
+            stats["rejected_invalid_execution_ids"] += 1
 
         _log_execution_skip_detail(
             "execution_skipped_invalid",
             case_path=str(case_dir.resolve()),
             execution_id=execution_id,
             error=str(exc),
-            skip_log_state=skip_log_state,
         )
     except OSError as exc:
         if stats is not None:
             stats["skipped_invalid"] += 1
+            stats["rejected_invalid_execution_ids"] += 1
 
         _log_execution_skip_detail(
             "execution_skipped_invalid",
             case_path=str(case_dir.resolve()),
             execution_id=execution_id,
             error=f"{exc.__class__.__name__}: {exc}",
-            skip_log_state=skip_log_state,
         )
 
     return False
+
+
+def _log_execution_collection_outcomes(
+    scan_results: list[CaseScanResult],
+    state: dict[str, Any],
+    candidates: list[IngestionCandidate],
+    discovery_stats: DiscoveryStats,
+) -> None:
+    """Emit collection outcomes for each valid discovered execution ID."""
+    case_state = state.get("cases", {})
+    if not isinstance(case_state, dict):
+        case_state = {}
+
+    selected_new_ids_by_case = {
+        candidate.case_path: set(candidate.new_execution_ids)
+        for candidate in candidates
+    }
+
+    for scan in sorted(scan_results, key=lambda item: item.case_path):
+        current_case_state = case_state.get(scan.case_path, {})
+        if not isinstance(current_case_state, dict):
+            current_case_state = {}
+
+        processed_ids = _case_state_processed_ids(current_case_state)
+        new_ids = set(scan.execution_ids) - processed_ids
+        selected_new_ids = selected_new_ids_by_case.get(scan.case_path, set())
+
+        for execution_id in scan.execution_ids:
+            if execution_id in processed_ids:
+                discovery_stats["rejected_existing_execution_ids"] += 1
+                _log_execution_collection_decision(
+                    case_path=scan.case_path,
+                    execution_id=execution_id,
+                    decision="rejected",
+                    reason="already_processed",
+                )
+                continue
+
+            if execution_id in selected_new_ids:
+                discovery_stats["accepted_execution_ids"] += 1
+                _log_execution_collection_decision(
+                    case_path=scan.case_path,
+                    execution_id=execution_id,
+                    decision="accepted",
+                    reason="new_execution",
+                )
+                continue
+
+            if execution_id in new_ids:
+                discovery_stats["deferred_execution_ids"] += 1
+                _log_execution_collection_decision(
+                    case_path=scan.case_path,
+                    execution_id=execution_id,
+                    decision="deferred",
+                    reason="max_cases_per_run",
+                )
+
+
+def _log_execution_collection_decision(
+    case_path: str,
+    execution_id: str,
+    decision: str,
+    reason: str,
+    *,
+    error: str | None = None,
+) -> None:
+    """Emit one normalized collection outcome for an execution directory."""
+    fields: dict[str, Any] = {
+        "case_path": case_path,
+        "decision": decision,
+        "execution_id": execution_id,
+        "reason": reason,
+    }
+    if error is not None:
+        fields["error"] = error
+
+    _log_event("execution_collection_decision", fields)
 
 
 def _log_execution_skip_detail(
@@ -542,37 +634,38 @@ def _log_execution_skip_detail(
     case_path: str,
     execution_id: str,
     error: str,
-    skip_log_state: dict[str, int],
 ) -> None:
-    """Log one execution skip detail or increment suppressed counter.
+    """Log one rejected execution decision for invalid or incomplete metadata.
 
     Parameters
     ----------
     event : str
-        Skip event name.
+        Skip event name used to derive normalized reason.
     case_path : str
         Absolute case path.
     execution_id : str
         Execution identifier.
     error : str
         Skip reason message.
-    skip_log_state : dict[str, int]
-        Mutable counters for emitted and suppressed detail logs.
     """
-    if skip_log_state["logged"] < MAX_SKIP_DETAIL_LOGS:
-        _log_event(
-            event,
-            {
-                "case_path": case_path,
-                "execution_id": execution_id,
-                "error": error,
-            },
-        )
-        skip_log_state["logged"] += 1
-
-        return
-
-    skip_log_state["suppressed"] += 1
+    reason = "incomplete" if event == "execution_skipped_incomplete" else "invalid"
+    _log_execution_collection_decision(
+        case_path=case_path,
+        execution_id=execution_id,
+        decision="rejected",
+        reason=reason,
+        error=error,
+    )
+    _log_event(
+        event,
+        {
+            "case_path": case_path,
+            "decision": "rejected",
+            "execution_id": execution_id,
+            "error": error,
+            "reason": reason,
+        },
+    )
 
 
 def _build_case_scan_results(
@@ -718,6 +811,17 @@ def _handle_dry_run(
             "execution_dirs_accepted": discovery_stats["execution_dirs_accepted"],
             "skipped_incomplete": discovery_stats["skipped_incomplete"],
             "skipped_invalid": discovery_stats["skipped_invalid"],
+            "accepted_execution_ids": discovery_stats["accepted_execution_ids"],
+            "rejected_existing_execution_ids": discovery_stats[
+                "rejected_existing_execution_ids"
+            ],
+            "rejected_incomplete_execution_ids": discovery_stats[
+                "rejected_incomplete_execution_ids"
+            ],
+            "rejected_invalid_execution_ids": discovery_stats[
+                "rejected_invalid_execution_ids"
+            ],
+            "deferred_execution_ids": discovery_stats["deferred_execution_ids"],
         },
     )
     _log_summary_table(
@@ -828,6 +932,17 @@ def _handle_ingest_run(
             "execution_dirs_accepted": discovery_stats["execution_dirs_accepted"],
             "skipped_incomplete": discovery_stats["skipped_incomplete"],
             "skipped_invalid": discovery_stats["skipped_invalid"],
+            "accepted_execution_ids": discovery_stats["accepted_execution_ids"],
+            "rejected_existing_execution_ids": discovery_stats[
+                "rejected_existing_execution_ids"
+            ],
+            "rejected_incomplete_execution_ids": discovery_stats[
+                "rejected_incomplete_execution_ids"
+            ],
+            "rejected_invalid_execution_ids": discovery_stats[
+                "rejected_invalid_execution_ids"
+            ],
+            "deferred_execution_ids": discovery_stats["deferred_execution_ids"],
         },
     )
     _log_summary_table(
@@ -854,6 +969,20 @@ def _common_summary_rows(
         ("execution_dirs_accepted", discovery_stats["execution_dirs_accepted"]),
         ("skipped_incomplete", discovery_stats["skipped_incomplete"]),
         ("skipped_invalid", discovery_stats["skipped_invalid"]),
+        ("accepted_execution_ids", discovery_stats["accepted_execution_ids"]),
+        (
+            "rejected_existing_execution_ids",
+            discovery_stats["rejected_existing_execution_ids"],
+        ),
+        (
+            "rejected_incomplete_execution_ids",
+            discovery_stats["rejected_incomplete_execution_ids"],
+        ),
+        (
+            "rejected_invalid_execution_ids",
+            discovery_stats["rejected_invalid_execution_ids"],
+        ),
+        ("deferred_execution_ids", discovery_stats["deferred_execution_ids"]),
     ]
 
 
@@ -903,7 +1032,7 @@ def _ingest_case_with_retries(
                 api_token,
                 candidate.case_path,
                 machine_name,
-                processed_execution_ids=candidate.execution_ids,
+                processed_execution_ids=candidate.new_execution_ids,
                 timeout_seconds=timeout_seconds,
             )
             body = response.get("body")
@@ -1224,6 +1353,11 @@ def _new_discovery_stats() -> DiscoveryStats:
         "execution_dirs_accepted": 0,
         "skipped_incomplete": 0,
         "skipped_invalid": 0,
+        "accepted_execution_ids": 0,
+        "rejected_existing_execution_ids": 0,
+        "rejected_incomplete_execution_ids": 0,
+        "rejected_invalid_execution_ids": 0,
+        "deferred_execution_ids": 0,
     }
 
 

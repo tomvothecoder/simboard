@@ -103,12 +103,13 @@ def test_discover_case_executions_skips_unreadable_execution_dirs(
     assert stats["skipped_invalid"] == 1
 
 
-def test_discover_case_executions_logs_suppressed_skips(
+def test_discover_case_executions_logs_all_rejected_skips(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     archive_root = tmp_path / "archive"
-    for index in range(ingestor_module.MAX_SKIP_DETAIL_LOGS + 2):
+    total_skips = 22
+    for index in range(total_skips):
         (archive_root / "case_a" / f"{100 + index}.1-1").mkdir(parents=True)
 
     logged_events: list[tuple[str, dict[str, Any]]] = []
@@ -124,16 +125,104 @@ def test_discover_case_executions_logs_suppressed_skips(
     )
 
     assert grouped == {}
-    suppression = [
+    rejected_decisions = [
+        fields
+        for event, fields in logged_events
+        if event == "execution_collection_decision"
+    ]
+    assert len(rejected_decisions) == total_skips
+    assert {
+        (
+            fields["case_path"],
+            fields["decision"],
+            fields["execution_id"],
+            fields["error"],
+            fields["reason"],
+        )
+        for fields in rejected_decisions
+    } == {
+        (
+            str((archive_root / "case_a").resolve()),
+            "rejected",
+            f"{100 + index}.1-1",
+            "missing",
+            "incomplete",
+        )
+        for index in range(total_skips)
+    }
+    assert not [
         fields
         for event, fields in logged_events
         if event == "execution_skip_logs_suppressed"
     ]
-    assert suppression == [
+
+
+def test_run_ingestor_logs_execution_collection_outcomes_for_state_and_limit(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "archive"
+    case_a = archive_root / "case_a"
+    case_b = archive_root / "case_b"
+    (case_a / "100.1-1").mkdir(parents=True)
+    (case_a / "101.1-1").mkdir(parents=True)
+    (case_b / "200.1-1").mkdir(parents=True)
+
+    logged_events: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(
+        ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: {
+            "cases": {
+                str(case_a.resolve()): {"processed_execution_ids": ["100.1-1"]},
+            }
+        },
+    )
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=1,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    exit_code = _run_ingestor(config, metadata_locator=lambda *_: {})
+
+    decisions = [
+        fields
+        for event, fields in logged_events
+        if event == "execution_collection_decision"
+    ]
+
+    assert exit_code == 0
+    assert decisions == [
         {
-            "suppressed_count": 2,
-            "detail_log_limit": ingestor_module.MAX_SKIP_DETAIL_LOGS,
-        }
+            "case_path": str(case_a.resolve()),
+            "decision": "rejected",
+            "execution_id": "100.1-1",
+            "reason": "already_processed",
+        },
+        {
+            "case_path": str(case_a.resolve()),
+            "decision": "accepted",
+            "execution_id": "101.1-1",
+            "reason": "new_execution",
+        },
+        {
+            "case_path": str(case_b.resolve()),
+            "decision": "deferred",
+            "execution_id": "200.1-1",
+            "reason": "max_cases_per_run",
+        },
     ]
 
 
@@ -236,36 +325,34 @@ def test_validate_execution_dir_counts_incomplete_with_stats(tmp_path: Path) -> 
     case_dir = tmp_path / "case_a"
     (case_dir / "100.1-1").mkdir(parents=True)
     stats = ingestor_module._new_discovery_stats()
-    skip_log_state = {"logged": 0, "suppressed": 0}
 
     valid = _validate_execution_dir(
         case_dir,
         "100.1-1",
         metadata_locator=lambda *_: (_ for _ in ()).throw(FileNotFoundError("missing")),
         stats=stats,
-        skip_log_state=skip_log_state,
     )
 
     assert valid is False
     assert stats["skipped_incomplete"] == 1
+    assert stats["rejected_incomplete_execution_ids"] == 1
 
 
 def test_validate_execution_dir_counts_value_error_with_stats(tmp_path: Path) -> None:
     case_dir = tmp_path / "case_a"
     (case_dir / "100.1-1").mkdir(parents=True)
     stats = ingestor_module._new_discovery_stats()
-    skip_log_state = {"logged": 0, "suppressed": 0}
 
     valid = _validate_execution_dir(
         case_dir,
         "100.1-1",
         metadata_locator=lambda *_: (_ for _ in ()).throw(ValueError("invalid")),
         stats=stats,
-        skip_log_state=skip_log_state,
     )
 
     assert valid is False
     assert stats["skipped_invalid"] == 1
+    assert stats["rejected_invalid_execution_ids"] == 1
 
 
 def test_build_case_scan_results_skips_empty_execution_lists() -> None:
@@ -435,6 +522,71 @@ def test_run_ingestor_uses_remote_state_and_builds_expected_payload(
         "timeout_seconds": "30",
     }
     assert str(case_dir.resolve()) in remote_state["cases"]
+
+
+def test_run_ingestor_submits_only_new_execution_ids_for_mixed_state(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "performance_archive"
+    case_dir = archive_root / "case_a"
+    (case_dir / "100.1-1").mkdir(parents=True)
+    (case_dir / "101.1-1").mkdir(parents=True)
+
+    captured_processed_execution_ids: list[list[str]] = []
+    remote_state = {
+        "cases": {
+            str(case_dir.resolve()): {"processed_execution_ids": ["100.1-1"]},
+        }
+    }
+
+    def fake_post_request(
+        endpoint_url: str,
+        api_token: str,
+        archive_path: str,
+        machine_name: str,
+        *,
+        processed_execution_ids: list[str],
+        timeout_seconds: int,
+    ) -> IngestionRequestResponse:
+        captured_processed_execution_ids.append(processed_execution_ids)
+        return {
+            "status_code": 201,
+            "body": {"created_count": 1, "duplicate_count": 0, "errors": []},
+        }
+
+    monkeypatch.setattr(
+        ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: remote_state,
+    )
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token-123",
+        archive_root=archive_root,
+        machine_name="perlmutter",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+
+    exit_code = _run_ingestor(
+        config,
+        metadata_locator=lambda *_: {},
+        sleep_fn=lambda *_: None,
+        post_request_fn=fake_post_request,
+    )
+
+    assert exit_code == 0
+    assert captured_processed_execution_ids == [["101.1-1"]]
+    assert remote_state["cases"][str(case_dir.resolve())][
+        "processed_execution_ids"
+    ] == [
+        "100.1-1",
+        "101.1-1",
+    ]
 
 
 def test_handle_ingest_run_returns_failure_when_case_ingestion_fails(
@@ -741,6 +893,11 @@ def test_completion_events_include_summary_counters(
         assert isinstance(payload["execution_dirs_accepted"], int)
         assert isinstance(payload["skipped_incomplete"], int)
         assert isinstance(payload["skipped_invalid"], int)
+        assert isinstance(payload["accepted_execution_ids"], int)
+        assert isinstance(payload["rejected_existing_execution_ids"], int)
+        assert isinstance(payload["rejected_incomplete_execution_ids"], int)
+        assert isinstance(payload["rejected_invalid_execution_ids"], int)
+        assert isinstance(payload["deferred_execution_ids"], int)
 
 
 def test_build_config_from_env_parses_valid_values(monkeypatch, tmp_path: Path) -> None:
@@ -1310,25 +1467,43 @@ def test_render_log_value_formats_values() -> None:
     assert _render_log_value({"b": 1, "a": 2}) == '{"a": 2, "b": 1}'
 
 
-def test_log_execution_skip_detail_suppresses_after_limit(monkeypatch) -> None:
+def test_log_execution_skip_detail_emits_normalized_decision(monkeypatch) -> None:
     logged_events: list[tuple[str, dict[str, Any]]] = []
 
     def fake_log_event(event: str, fields: dict[str, Any] | None = None) -> None:
         logged_events.append((event, {} if fields is None else fields))
 
     monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
-    skip_log_state = {"logged": ingestor_module.MAX_SKIP_DETAIL_LOGS, "suppressed": 0}
 
     _log_execution_skip_detail(
         "execution_skipped_incomplete",
         "/archive/case_a",
         "100.1-1",
         "missing",
-        skip_log_state,
     )
 
-    assert logged_events == []
-    assert skip_log_state["suppressed"] == 1
+    assert logged_events == [
+        (
+            "execution_collection_decision",
+            {
+                "case_path": "/archive/case_a",
+                "decision": "rejected",
+                "execution_id": "100.1-1",
+                "error": "missing",
+                "reason": "incomplete",
+            },
+        ),
+        (
+            "execution_skipped_incomplete",
+            {
+                "case_path": "/archive/case_a",
+                "decision": "rejected",
+                "execution_id": "100.1-1",
+                "error": "missing",
+                "reason": "incomplete",
+            },
+        ),
+    ]
 
 
 def test_log_summary_table_and_startup_configuration(
