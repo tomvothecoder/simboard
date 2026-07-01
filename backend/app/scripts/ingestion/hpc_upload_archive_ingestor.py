@@ -1,38 +1,9 @@
-"""Scan archives and upload changed cases to SimBoard as single-case archives.
+"""Scan archives and upload cases to SimBoard as single-case archives.
 
 This runner mirrors the NERSC path-ingestor state/dedupe behavior, but instead
-of sending a filesystem path it packages each changed case directory into a
-temporary ``.tar.gz`` archive and uploads it to the dedicated
+of sending a filesystem path it packages each case directory with new executions
+into a temporary ``.tar.gz`` archive and uploads it to the dedicated
 ``/api/v1/ingestions/from-hpc-upload`` endpoint.
-
-Runner terms used heavily in this module and shared helper logs:
-
-  - submission-qualified case / ``submission_qualified_cases``: case count with
-    at least one newly discovered complete execution before per-run capping
-  - selected submission case / ``selected_submission_cases``:
-    submission-qualified case count actually chosen for the current run after
-    any ``MAX_CASES_PER_RUN`` cap
-  - ``execution_dirs_scanned``: execution directory count whose names matched
-    the execution pattern and were sent through discovery validation
-  - ``execution_dirs_accepted``: scanned execution directory count that passed
-    validation and were retained as valid discovered executions
-  - ``skipped_incomplete``: execution directory count rejected during discovery
-    because required metadata files or fields were missing or incomplete
-  - ``skipped_invalid``: execution directory count rejected during discovery
-    because metadata was invalid or the directory could not be read
-  - ``accepted_execution_ids``: valid discovered execution ID count that was
-    both new and selected for the current run
-  - ``rejected_existing_execution_ids``: valid discovered execution ID count
-    already present in stored processed state
-  - ``rejected_incomplete_execution_ids``: execution ID count rejected during
-    discovery as incomplete
-  - ``rejected_invalid_execution_ids``: execution ID count rejected during
-    discovery as invalid or unreadable
-  - deferred execution / ``deferred_execution_ids``: new valid execution ID
-    count not selected because per-run case capping stopped earlier selection
-  - ``processed_execution_ids``: known execution IDs submitted for one case
-
-Canonical definitions live in ``docs/architecture/metadata-ingestion.md``.
 """
 
 from __future__ import annotations
@@ -168,6 +139,7 @@ def _run_ingestor(
             scan_results,
             submission_qualified_case_count,
             discovery_stats,
+            archive_root=config.archive_root,
         )
 
     return _handle_ingest_run(

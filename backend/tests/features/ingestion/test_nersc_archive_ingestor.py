@@ -33,8 +33,8 @@ from app.scripts.ingestion.nersc_archive_ingestor import (
     _fresh_state,
     _ingest_case_with_retries,
     _is_transient_status,
+    _log_event,
     _log_startup_configuration,
-    _log_summary_table,
     _normalize_remote_state,
     _normalized_api_base_url,
     _parse_bool,
@@ -272,7 +272,7 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
         (
             "case_collection_begin",
             {
-                "case_path": str(case_a.resolve()),
+                "case": "case_a",
                 "execution_count_total": 2,
                 "execution_count_valid": 2,
                 "execution_count_rejected_incomplete": 0,
@@ -286,7 +286,7 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
         (
             "execution_collection_decision",
             {
-                "case_path": str(case_a.resolve()),
+                "case": "case_a",
                 "decision": "rejected",
                 "execution_id": "100.1-1",
                 "reason": "already_processed",
@@ -295,7 +295,7 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
         (
             "execution_collection_decision",
             {
-                "case_path": str(case_a.resolve()),
+                "case": "case_a",
                 "decision": "accepted",
                 "execution_id": "101.1-1",
                 "reason": "new_execution",
@@ -304,7 +304,7 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
         (
             "case_collection_summary",
             {
-                "case_path": str(case_a.resolve()),
+                "case": "case_a",
                 "accepted": 1,
                 "rejected_existing": 1,
                 "rejected_incomplete": 0,
@@ -315,7 +315,7 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
         (
             "case_collection_begin",
             {
-                "case_path": str(case_b.resolve()),
+                "case": "case_b",
                 "execution_count_total": 1,
                 "execution_count_valid": 1,
                 "execution_count_rejected_incomplete": 0,
@@ -329,7 +329,7 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
         (
             "execution_collection_decision",
             {
-                "case_path": str(case_b.resolve()),
+                "case": "case_b",
                 "decision": "deferred",
                 "execution_id": "200.1-1",
                 "reason": "max_cases_per_run",
@@ -338,7 +338,7 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
         (
             "case_collection_summary",
             {
-                "case_path": str(case_b.resolve()),
+                "case": "case_b",
                 "accepted": 0,
                 "rejected_existing": 0,
                 "rejected_incomplete": 0,
@@ -349,19 +349,19 @@ def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
     ]
     assert decisions == [
         {
-            "case_path": str(case_a.resolve()),
+            "case": "case_a",
             "decision": "rejected",
             "execution_id": "100.1-1",
             "reason": "already_processed",
         },
         {
-            "case_path": str(case_a.resolve()),
+            "case": "case_a",
             "decision": "accepted",
             "execution_id": "101.1-1",
             "reason": "new_execution",
         },
         {
-            "case_path": str(case_b.resolve()),
+            "case": "case_b",
             "decision": "deferred",
             "execution_id": "200.1-1",
             "reason": "max_cases_per_run",
@@ -490,7 +490,7 @@ def test_validate_execution_dir_counts_incomplete_with_stats(tmp_path: Path) -> 
 
     assert decision is not None
     assert decision.to_log_fields() == {
-        "case_path": str(case_dir.resolve()),
+        "case": str(case_dir.resolve()),
         "decision": "rejected",
         "execution_id": "100.1-1",
         "reason": "incomplete",
@@ -514,7 +514,7 @@ def test_validate_execution_dir_counts_value_error_with_stats(tmp_path: Path) ->
 
     assert decision is not None
     assert decision.to_log_fields() == {
-        "case_path": str(case_dir.resolve()),
+        "case": str(case_dir.resolve()),
         "decision": "rejected",
         "execution_id": "100.1-1",
         "reason": "invalid",
@@ -989,8 +989,13 @@ def test_dry_run_candidate_suppression_event_emitted_once(
         for event, fields in logged_events
         if event == "dry_run_candidate_logs_suppressed"
     ]
+    candidate_events = [
+        fields for event, fields in logged_events if event == "dry_run_candidate"
+    ]
     assert exit_code == 0
     assert len(suppression_events) == 1
+    assert candidate_events[0]["case"] == "case_000"
+    assert "case_path" not in candidate_events[0]
     assert suppression_events[0]["suppressed_count"] == 5
     assert (
         suppression_events[0]["detail_log_limit"]
@@ -1056,6 +1061,20 @@ def test_completion_events_include_summary_counters(
     run_completed = [
         fields for event, fields in logged_events if event == "run_completed"
     ][0]
+    dry_run_summary_counts = [
+        fields for event, fields in logged_events if event == "dry_run_summary_counts"
+    ][0]
+    dry_run_summary_candidates = [
+        fields
+        for event, fields in logged_events
+        if event == "dry_run_summary_candidates"
+    ][0]
+    run_summary_counts = [
+        fields for event, fields in logged_events if event == "run_summary_counts"
+    ][0]
+    run_summary_outcomes = [
+        fields for event, fields in logged_events if event == "run_summary_outcomes"
+    ][0]
 
     for payload in (dry_run_completed, run_completed):
         assert isinstance(payload["submission_qualified_cases"], int)
@@ -1069,6 +1088,48 @@ def test_completion_events_include_summary_counters(
         assert isinstance(payload["rejected_incomplete_execution_ids"], int)
         assert isinstance(payload["rejected_invalid_execution_ids"], int)
         assert isinstance(payload["deferred_execution_ids"], int)
+
+    assert dry_run_summary_counts["mode"] == "dry-run"
+    assert isinstance(dry_run_summary_counts["discovered_cases"], int)
+    assert isinstance(dry_run_summary_counts["submission_qualified_cases"], int)
+    assert isinstance(dry_run_summary_counts["selected_submission_cases"], int)
+    assert isinstance(dry_run_summary_counts["execution_dirs_scanned"], int)
+    assert isinstance(dry_run_summary_counts["execution_dirs_accepted"], int)
+    assert isinstance(dry_run_summary_counts["skipped_incomplete"], int)
+    assert isinstance(dry_run_summary_counts["skipped_invalid"], int)
+
+    assert isinstance(dry_run_summary_candidates["accepted_execution_ids"], int)
+    assert isinstance(
+        dry_run_summary_candidates["rejected_existing_execution_ids"], int
+    )
+    assert isinstance(
+        dry_run_summary_candidates["rejected_incomplete_execution_ids"], int
+    )
+    assert isinstance(
+        dry_run_summary_candidates["rejected_invalid_execution_ids"], int
+    )
+    assert isinstance(dry_run_summary_candidates["deferred_execution_ids"], int)
+    assert isinstance(dry_run_summary_candidates["candidate_logs_emitted"], int)
+    assert isinstance(dry_run_summary_candidates["candidate_logs_suppressed"], int)
+
+    assert run_summary_counts["mode"] == "ingest"
+    assert isinstance(run_summary_counts["scanned_cases"], int)
+    assert isinstance(run_summary_counts["submission_qualified_cases"], int)
+    assert isinstance(run_summary_counts["selected_submission_cases"], int)
+    assert isinstance(run_summary_counts["execution_dirs_scanned"], int)
+    assert isinstance(run_summary_counts["execution_dirs_accepted"], int)
+    assert isinstance(run_summary_counts["skipped_incomplete"], int)
+    assert isinstance(run_summary_counts["skipped_invalid"], int)
+
+    assert isinstance(run_summary_outcomes["success_count"], int)
+    assert isinstance(run_summary_outcomes["failure_count"], int)
+    assert isinstance(run_summary_outcomes["accepted_execution_ids"], int)
+    assert isinstance(run_summary_outcomes["rejected_existing_execution_ids"], int)
+    assert isinstance(
+        run_summary_outcomes["rejected_incomplete_execution_ids"], int
+    )
+    assert isinstance(run_summary_outcomes["rejected_invalid_execution_ids"], int)
+    assert isinstance(run_summary_outcomes["deferred_execution_ids"], int)
 
 
 def test_build_config_from_env_parses_valid_values(monkeypatch, tmp_path: Path) -> None:
@@ -1669,7 +1730,7 @@ def test_validate_execution_dir_compacts_incomplete_archive_errors(
 
     assert decision is not None
     assert decision.to_log_fields() == {
-        "case_path": str(case_dir.resolve()),
+        "case": str(case_dir.resolve()),
         "decision": "rejected",
         "execution_id": "100.1-1",
         "reason": "incomplete",
@@ -1711,7 +1772,7 @@ def test_validate_execution_dir_compacts_archive_validation_errors(
 
     assert decision is not None
     assert decision.to_log_fields() == {
-        "case_path": str(case_dir.resolve()),
+        "case": str(case_dir.resolve()),
         "decision": "rejected",
         "execution_id": "100.1-1",
         "reason": "invalid",
@@ -1774,7 +1835,7 @@ def test_run_ingestor_logs_rejected_only_case_block(
         (
             "case_collection_begin",
             {
-                "case_path": str(case_a.resolve()),
+                "case": "case_a",
                 "execution_count_total": 2,
                 "execution_count_valid": 0,
                 "execution_count_rejected_incomplete": 1,
@@ -1788,7 +1849,7 @@ def test_run_ingestor_logs_rejected_only_case_block(
         (
             "execution_collection_decision",
             {
-                "case_path": str(case_a.resolve()),
+                "case": "case_a",
                 "decision": "rejected",
                 "execution_id": "100.1-1",
                 "reason": "incomplete",
@@ -1798,7 +1859,7 @@ def test_run_ingestor_logs_rejected_only_case_block(
         (
             "execution_collection_decision",
             {
-                "case_path": str(case_a.resolve()),
+                "case": "case_a",
                 "decision": "rejected",
                 "execution_id": "101.1-1",
                 "reason": "invalid",
@@ -1808,7 +1869,7 @@ def test_run_ingestor_logs_rejected_only_case_block(
         (
             "case_collection_summary",
             {
-                "case_path": str(case_a.resolve()),
+                "case": "case_a",
                 "accepted": 0,
                 "rejected_existing": 0,
                 "rejected_incomplete": 1,
@@ -1819,7 +1880,7 @@ def test_run_ingestor_logs_rejected_only_case_block(
         (
             "case_collection_begin",
             {
-                "case_path": str(case_b.resolve()),
+                "case": "case_b",
                 "execution_count_total": 1,
                 "execution_count_valid": 1,
                 "execution_count_rejected_incomplete": 0,
@@ -1833,7 +1894,7 @@ def test_run_ingestor_logs_rejected_only_case_block(
         (
             "execution_collection_decision",
             {
-                "case_path": str(case_b.resolve()),
+                "case": "case_b",
                 "decision": "accepted",
                 "execution_id": "200.1-1",
                 "reason": "new_execution",
@@ -1842,7 +1903,7 @@ def test_run_ingestor_logs_rejected_only_case_block(
         (
             "case_collection_summary",
             {
-                "case_path": str(case_b.resolve()),
+                "case": "case_b",
                 "accepted": 1,
                 "rejected_existing": 0,
                 "rejected_incomplete": 0,
@@ -1890,21 +1951,21 @@ def test_run_ingestor_groups_case_logs_without_interleaving(
     exit_code = _run_ingestor(config, metadata_locator=lambda *_: {})
 
     case_block_markers = [
-        (event, fields["case_path"])
+        (event, fields["case"])
         for event, fields in logged_events
         if event in {"case_collection_begin", "case_collection_summary"}
     ]
 
     assert exit_code == 0
     assert case_block_markers == [
-        ("case_collection_begin", str(case_a.resolve())),
-        ("case_collection_summary", str(case_a.resolve())),
-        ("case_collection_begin", str(case_b.resolve())),
-        ("case_collection_summary", str(case_b.resolve())),
+        ("case_collection_begin", "case_a"),
+        ("case_collection_summary", "case_a"),
+        ("case_collection_begin", "case_b"),
+        ("case_collection_summary", "case_b"),
     ]
 
 
-def test_log_summary_table_and_startup_configuration(
+def test_log_startup_configuration_emits_structured_block(
     monkeypatch, tmp_path: Path
 ) -> None:
     logged_events: list[tuple[str, dict[str, Any]]] = []
@@ -1913,8 +1974,6 @@ def test_log_summary_table_and_startup_configuration(
         logged_events.append((event, {} if fields is None else fields))
 
     monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
-
-    _log_summary_table("summary", [("a", 1), ("b", "two words")])
 
     config = IngestorConfig(
         api_base_url="http://backend:8000",
@@ -1932,7 +1991,59 @@ def test_log_summary_table_and_startup_configuration(
         state_endpoint_url="http://backend:8000/api/v1/ingestions/state",
     )
 
-    assert logged_events[0][0] == "summary_table"
-    assert logged_events[1][0] == "startup_configuration_begin"
-    assert logged_events[2][0] == "summary_table"
-    assert logged_events[3][0] == "startup_configuration_end"
+    assert logged_events == [
+        ("startup_configuration_begin", {}),
+        (
+            "startup_configuration_api",
+            {
+                "api_base_url": "http://backend:8000",
+                "endpoint_url": "http://backend:8000/api/v1/ingestions/from-path",
+                "state_endpoint_url": "http://backend:8000/api/v1/ingestions/state",
+            },
+        ),
+        (
+            "startup_configuration_paths",
+            {"archive_root": str(tmp_path)},
+        ),
+        (
+            "startup_configuration_runtime",
+            {
+                "machine_name": "pm",
+                "dry_run": True,
+                "max_cases_per_run": 5,
+                "max_attempts": 2,
+                "request_timeout_seconds": 60,
+            },
+        ),
+        ("startup_configuration_auth", {"has_api_token": True}),
+        ("startup_configuration_end", {}),
+    ]
+
+
+def test_log_event_uses_event_specific_field_order(monkeypatch) -> None:
+    logged_messages: list[str] = []
+
+    monkeypatch.setattr(
+        ingestor_module.logger,
+        "info",
+        lambda message: logged_messages.append(message),
+    )
+
+    _log_event(
+        "execution_collection_decision",
+        {
+            "reason": "incomplete",
+            "detail": "missing",
+            "decision": "rejected",
+            "error_count": 2,
+            "execution_id": "100.1-1",
+            "case": "case_a",
+            "zzz": "tail",
+        },
+    )
+
+    assert logged_messages == [
+        "event=execution_collection_decision "
+        "case=case_a execution_id=100.1-1 decision=rejected "
+        "reason=incomplete error_count=2 detail=missing zzz=tail"
+    ]

@@ -15,9 +15,10 @@ Each run executes four phases:
 Runner terms used heavily in this module and its logs:
 
   - submission-qualified case / ``submission_qualified_cases``: case count with
-    at least one newly discovered complete execution before per-run capping
+    at least one newly discovered complete execution ID before applying any
+    ``MAX_CASES_PER_RUN`` cap
   - selected submission case / ``selected_submission_cases``:
-    submission-qualified case count actually chosen for the current run after
+    submission-qualified case count selected for the current run after applying
     any ``MAX_CASES_PER_RUN`` cap
   - ``execution_dirs_scanned``: execution directory count whose names matched
     the execution pattern and were sent through discovery validation
@@ -27,17 +28,21 @@ Runner terms used heavily in this module and its logs:
     because required metadata files or fields were missing or incomplete
   - ``skipped_invalid``: execution directory count rejected during discovery
     because metadata was invalid or the directory could not be read
-  - ``accepted_execution_ids``: valid discovered execution ID count that was
-    both new and selected for the current run
+  - ``accepted_execution_ids``: newly discovered valid execution ID count
+    selected for the current run
   - ``rejected_existing_execution_ids``: valid discovered execution ID count
     already present in stored processed state
   - ``rejected_incomplete_execution_ids``: execution ID count rejected during
-    discovery as incomplete
+    discovery as incomplete because required metadata files or fields were
+    missing or incomplete
   - ``rejected_invalid_execution_ids``: execution ID count rejected during
-    discovery as invalid or unreadable
-  - deferred execution / ``deferred_execution_ids``: new valid execution ID
-    count not selected because per-run case capping stopped earlier selection
-  - ``processed_execution_ids``: known execution IDs submitted for one case
+    discovery as invalid or unreadable because metadata was invalid or the
+    directory could not be read
+  - deferred execution / ``deferred_execution_ids``: newly discovered valid
+    execution ID count not selected for the current run because per-run case
+    capping stopped earlier selection
+  - ``processed_execution_ids``: execution ID count already recorded in stored
+    processed state for one case
 
 Canonical definitions live in ``docs/architecture/metadata-ingestion.md``.
 """
@@ -80,6 +85,132 @@ DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_TIMEOUT_SECONDS = 60
 MAX_DRY_RUN_CANDIDATE_LOGS = 20
 DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES = 250
+EVENT_FIELD_ORDER: dict[str, tuple[str, ...]] = {
+    "run_started": ("mode", "archive_root"),
+    "run_finished": ("mode", "exit_code", "duration_seconds"),
+    "archive_scan_started": ("archive_root",),
+    "archive_scan_progress": (
+        "archive_root",
+        "directories_visited",
+        "discovered_cases",
+        "execution_dirs_scanned",
+        "execution_dirs_accepted",
+        "duration_seconds",
+    ),
+    "archive_scan_completed": (
+        "archive_root",
+        "directories_visited",
+        "discovered_cases",
+        "execution_dirs_scanned",
+        "execution_dirs_accepted",
+        "duration_seconds",
+    ),
+    "case_collection_begin": (
+        "case",
+        "execution_count_total",
+        "execution_count_valid",
+        "execution_count_existing",
+        "execution_count_new",
+        "execution_count_selected_new",
+        "execution_count_deferred",
+        "execution_count_rejected_incomplete",
+        "execution_count_rejected_invalid",
+    ),
+    "execution_collection_decision": (
+        "case",
+        "execution_id",
+        "decision",
+        "reason",
+        "error_codes",
+        "error_count",
+        "missing_file_specs",
+        "detail",
+    ),
+    "case_collection_summary": (
+        "case",
+        "accepted",
+        "rejected_existing",
+        "rejected_incomplete",
+        "rejected_invalid",
+        "deferred",
+    ),
+    "scan_completed": (
+        "archive_root",
+        "discovered_cases",
+        "submission_qualified_cases",
+        "selected_submission_cases",
+        "execution_dirs_scanned",
+        "execution_dirs_accepted",
+        "skipped_incomplete",
+        "skipped_invalid",
+        "accepted_execution_ids",
+        "rejected_existing_execution_ids",
+        "rejected_incomplete_execution_ids",
+        "rejected_invalid_execution_ids",
+        "deferred_execution_ids",
+    ),
+    "dry_run_candidate": ("case", "execution_count", "new_execution_count"),
+    "startup_configuration_api": (
+        "api_base_url",
+        "endpoint_url",
+        "state_endpoint_url",
+    ),
+    "startup_configuration_paths": ("archive_root",),
+    "startup_configuration_runtime": (
+        "machine_name",
+        "dry_run",
+        "max_cases_per_run",
+        "max_attempts",
+        "request_timeout_seconds",
+    ),
+    "startup_configuration_auth": ("has_api_token",),
+    "dry_run_summary_counts": (
+        "mode",
+        "discovered_cases",
+        "submission_qualified_cases",
+        "selected_submission_cases",
+        "execution_dirs_scanned",
+        "execution_dirs_accepted",
+        "skipped_incomplete",
+        "skipped_invalid",
+    ),
+    "dry_run_summary_candidates": (
+        "accepted_execution_ids",
+        "rejected_existing_execution_ids",
+        "rejected_incomplete_execution_ids",
+        "rejected_invalid_execution_ids",
+        "deferred_execution_ids",
+        "candidate_logs_emitted",
+        "candidate_logs_suppressed",
+    ),
+    "run_summary_counts": (
+        "mode",
+        "scanned_cases",
+        "submission_qualified_cases",
+        "selected_submission_cases",
+        "execution_dirs_scanned",
+        "execution_dirs_accepted",
+        "skipped_incomplete",
+        "skipped_invalid",
+    ),
+    "run_summary_outcomes": (
+        "success_count",
+        "failure_count",
+        "accepted_execution_ids",
+        "rejected_existing_execution_ids",
+        "rejected_incomplete_execution_ids",
+        "rejected_invalid_execution_ids",
+        "deferred_execution_ids",
+    ),
+    "case_ingested": (
+        "case_path",
+        "attempts",
+        "created_count",
+        "duplicate_count",
+        "error_count",
+    ),
+    "case_ingestion_failed": ("case_path", "attempts", "status_code", "error"),
+}
 
 
 @dataclass(frozen=True)
@@ -181,12 +312,12 @@ class ExecutionCollectionDecision:
     missing_file_specs: list[str] | None = None
     detail: str | None = None
 
-    def to_log_fields(self) -> dict[str, Any]:
+    def to_log_fields(self, case: str | None = None) -> dict[str, Any]:
         """Render log fields for one execution decision."""
         fields: dict[str, Any] = {
-            "case_path": self.case_path,
-            "decision": self.decision,
+            "case": self.case_path if case is None else case,
             "execution_id": self.execution_id,
+            "decision": self.decision,
             "reason": self.reason,
         }
         if self.error_count is not None:
@@ -428,6 +559,7 @@ def _run_ingestor(
             scan_results,
             submission_qualified_case_count,
             discovery_stats,
+            archive_root=config.archive_root,
         )
 
     return _handle_ingest_run(
@@ -509,7 +641,11 @@ def _scan_archive(
         else all_candidates[: config.max_cases_per_run]
     )
     _log_execution_collection_outcomes(
-        case_collection_data, state, candidates, discovery_stats
+        case_collection_data,
+        state,
+        candidates,
+        discovery_stats,
+        archive_root=config.archive_root,
     )
 
     return (
@@ -760,6 +896,8 @@ def _log_execution_collection_outcomes(
     state: dict[str, Any],
     candidates: list[IngestionCandidate],
     discovery_stats: DiscoveryStats,
+    *,
+    archive_root: Path,
 ) -> None:
     """Emit one contiguous decision block for each discovered case."""
     case_state = state.get("cases", {})
@@ -773,6 +911,7 @@ def _log_execution_collection_outcomes(
 
     for case_path in sorted(case_collection_data):
         log_data = case_collection_data[case_path]
+        case_label = _case_log_label(case_path, archive_root)
         current_case_state = case_state.get(case_path, {})
         if not isinstance(current_case_state, dict):
             current_case_state = {}
@@ -797,7 +936,7 @@ def _log_execution_collection_outcomes(
         _log_event(
             "case_collection_begin",
             {
-                "case_path": case_path,
+                "case": case_label,
                 "execution_count_total": log_data.execution_count_total,
                 "execution_count_valid": len(valid_execution_ids),
                 "execution_count_rejected_incomplete": rejected_incomplete,
@@ -844,12 +983,15 @@ def _log_execution_collection_outcomes(
                 )
 
         for execution_id in sorted(decisions_by_execution_id):
-            _log_execution_collection_decision(decisions_by_execution_id[execution_id])
+            _log_execution_collection_decision(
+                decisions_by_execution_id[execution_id],
+                case=case_label,
+            )
 
         _log_event(
             "case_collection_summary",
             {
-                "case_path": case_path,
+                "case": case_label,
                 "accepted": len(selected_new_ids),
                 "rejected_existing": len(existing_ids),
                 "rejected_incomplete": rejected_incomplete,
@@ -861,9 +1003,11 @@ def _log_execution_collection_outcomes(
 
 def _log_execution_collection_decision(
     decision: ExecutionCollectionDecision,
+    *,
+    case: str | None = None,
 ) -> None:
     """Emit one normalized collection outcome for an execution directory."""
-    _log_event("execution_collection_decision", decision.to_log_fields())
+    _log_event("execution_collection_decision", decision.to_log_fields(case=case))
 
 
 def _build_rejected_execution_decision(
@@ -1022,6 +1166,8 @@ def _handle_dry_run(
     scan_results: list[CaseScanResult],
     submission_qualified_case_count: int,
     discovery_stats: DiscoveryStats,
+    *,
+    archive_root: Path,
 ) -> int:
     """Emit dry-run candidate logs and completion summaries.
 
@@ -1049,7 +1195,7 @@ def _handle_dry_run(
             _log_event(
                 "dry_run_candidate",
                 {
-                    "case_path": candidate.case_path,
+                    "case": _case_log_label(candidate.case_path, archive_root),
                     "execution_count": len(candidate.execution_ids),
                     "new_execution_count": len(candidate.new_execution_ids),
                 },
@@ -1090,17 +1236,13 @@ def _handle_dry_run(
             "deferred_execution_ids": discovery_stats["deferred_execution_ids"],
         },
     )
-    _log_summary_table(
-        "dry_run_summary",
-        rows=[
-            ("mode", "dry-run"),
-            ("discovered_cases", len(scan_results)),
-            ("submission_qualified_cases", submission_qualified_case_count),
-            ("selected_submission_cases", len(candidates)),
-            *_common_summary_rows(discovery_stats),
-            ("candidate_logs_emitted", logged_candidates),
-            ("candidate_logs_suppressed", suppressed_candidates),
-        ],
+    _log_dry_run_summary(
+        discovered_cases=len(scan_results),
+        submission_qualified_cases=submission_qualified_case_count,
+        selected_submission_cases=len(candidates),
+        discovery_stats=discovery_stats,
+        candidate_logs_emitted=logged_candidates,
+        candidate_logs_suppressed=suppressed_candidates,
     )
     return 0
 
@@ -1216,46 +1358,125 @@ def _handle_ingest_run(
             "deferred_execution_ids": discovery_stats["deferred_execution_ids"],
         },
     )
-    _log_summary_table(
-        "run_summary",
-        rows=[
-            ("mode", "ingest"),
-            ("scanned_cases", len(scan_results)),
-            ("submission_qualified_cases", submission_qualified_case_count),
-            ("selected_submission_cases", len(candidates)),
-            ("success_count", success_count),
-            ("failure_count", failure_count),
-            *_common_summary_rows(discovery_stats),
-        ],
+    _log_run_summary(
+        scanned_cases=len(scan_results),
+        submission_qualified_cases=submission_qualified_case_count,
+        selected_submission_cases=len(candidates),
+        success_count=success_count,
+        failure_count=failure_count,
+        discovery_stats=discovery_stats,
     )
 
     return 1 if failure_count else 0
 
 
-def _common_summary_rows(
+def _common_summary_fields(discovery_stats: DiscoveryStats) -> dict[str, int]:
+    """Build summary fields shared by dry-run and ingest completion logs."""
+    return {
+        "execution_dirs_scanned": discovery_stats["execution_dirs_scanned"],
+        "execution_dirs_accepted": discovery_stats["execution_dirs_accepted"],
+        "skipped_incomplete": discovery_stats["skipped_incomplete"],
+        "skipped_invalid": discovery_stats["skipped_invalid"],
+        "accepted_execution_ids": discovery_stats["accepted_execution_ids"],
+        "rejected_existing_execution_ids": discovery_stats[
+            "rejected_existing_execution_ids"
+        ],
+        "rejected_incomplete_execution_ids": discovery_stats[
+            "rejected_incomplete_execution_ids"
+        ],
+        "rejected_invalid_execution_ids": discovery_stats[
+            "rejected_invalid_execution_ids"
+        ],
+        "deferred_execution_ids": discovery_stats["deferred_execution_ids"],
+    }
+
+
+def _log_dry_run_summary(
+    *,
+    discovered_cases: int,
+    submission_qualified_cases: int,
+    selected_submission_cases: int,
     discovery_stats: DiscoveryStats,
-) -> list[tuple[str, Any]]:
-    """Build summary rows shared by dry-run and ingest completion tables."""
-    return [
-        ("execution_dirs_scanned", discovery_stats["execution_dirs_scanned"]),
-        ("execution_dirs_accepted", discovery_stats["execution_dirs_accepted"]),
-        ("skipped_incomplete", discovery_stats["skipped_incomplete"]),
-        ("skipped_invalid", discovery_stats["skipped_invalid"]),
-        ("accepted_execution_ids", discovery_stats["accepted_execution_ids"]),
-        (
-            "rejected_existing_execution_ids",
-            discovery_stats["rejected_existing_execution_ids"],
-        ),
-        (
-            "rejected_incomplete_execution_ids",
-            discovery_stats["rejected_incomplete_execution_ids"],
-        ),
-        (
-            "rejected_invalid_execution_ids",
-            discovery_stats["rejected_invalid_execution_ids"],
-        ),
-        ("deferred_execution_ids", discovery_stats["deferred_execution_ids"]),
-    ]
+    candidate_logs_emitted: int,
+    candidate_logs_suppressed: int,
+) -> None:
+    """Emit compact dry-run summary event block."""
+    summary_fields = _common_summary_fields(discovery_stats)
+    _log_event(
+        "dry_run_summary_counts",
+        {
+            "mode": "dry-run",
+            "discovered_cases": discovered_cases,
+            "submission_qualified_cases": submission_qualified_cases,
+            "selected_submission_cases": selected_submission_cases,
+            "execution_dirs_scanned": summary_fields["execution_dirs_scanned"],
+            "execution_dirs_accepted": summary_fields["execution_dirs_accepted"],
+            "skipped_incomplete": summary_fields["skipped_incomplete"],
+            "skipped_invalid": summary_fields["skipped_invalid"],
+        },
+    )
+    _log_event(
+        "dry_run_summary_candidates",
+        {
+            "accepted_execution_ids": summary_fields["accepted_execution_ids"],
+            "rejected_existing_execution_ids": summary_fields[
+                "rejected_existing_execution_ids"
+            ],
+            "rejected_incomplete_execution_ids": summary_fields[
+                "rejected_incomplete_execution_ids"
+            ],
+            "rejected_invalid_execution_ids": summary_fields[
+                "rejected_invalid_execution_ids"
+            ],
+            "deferred_execution_ids": summary_fields["deferred_execution_ids"],
+            "candidate_logs_emitted": candidate_logs_emitted,
+            "candidate_logs_suppressed": candidate_logs_suppressed,
+        },
+    )
+
+
+def _log_run_summary(
+    *,
+    scanned_cases: int,
+    submission_qualified_cases: int,
+    selected_submission_cases: int,
+    success_count: int,
+    failure_count: int,
+    discovery_stats: DiscoveryStats,
+) -> None:
+    """Emit compact ingest-run summary event block."""
+    summary_fields = _common_summary_fields(discovery_stats)
+    _log_event(
+        "run_summary_counts",
+        {
+            "mode": "ingest",
+            "scanned_cases": scanned_cases,
+            "submission_qualified_cases": submission_qualified_cases,
+            "selected_submission_cases": selected_submission_cases,
+            "execution_dirs_scanned": summary_fields["execution_dirs_scanned"],
+            "execution_dirs_accepted": summary_fields["execution_dirs_accepted"],
+            "skipped_incomplete": summary_fields["skipped_incomplete"],
+            "skipped_invalid": summary_fields["skipped_invalid"],
+        },
+    )
+    _log_event(
+        "run_summary_outcomes",
+        {
+            "success_count": success_count,
+            "failure_count": failure_count,
+            "accepted_execution_ids": summary_fields["accepted_execution_ids"],
+            "rejected_existing_execution_ids": summary_fields[
+                "rejected_existing_execution_ids"
+            ],
+            "rejected_incomplete_execution_ids": summary_fields[
+                "rejected_incomplete_execution_ids"
+            ],
+            "rejected_invalid_execution_ids": summary_fields[
+                "rejected_invalid_execution_ids"
+            ],
+            "deferred_execution_ids": summary_fields["deferred_execution_ids"],
+        },
+    )
 
 
 def _ingest_case_with_retries(
@@ -1677,6 +1898,17 @@ def _render_log_value(value: Any) -> str:
     return json.dumps(value, sort_keys=True)
 
 
+def _case_log_label(case_path: str, archive_root: Path | str) -> str:
+    """Return an archive-root-relative case label for human-facing INFO logs."""
+    case = Path(case_path)
+    root = Path(archive_root)
+
+    try:
+        return str(case.relative_to(root))
+    except ValueError:
+        return case_path
+
+
 def _log_startup_configuration(
     config: IngestorConfig,
     endpoint_url: str,
@@ -1692,43 +1924,52 @@ def _log_startup_configuration(
         Fully qualified ingestion endpoint URL.
     """
     _log_event("startup_configuration_begin")
-    _log_summary_table(
-        "startup_configuration",
-        rows=[
-            ("api.api_base_url", config.api_base_url),
-            ("api.endpoint_url", endpoint_url),
-            ("api.state_endpoint_url", state_endpoint_url),
-            ("paths.archive_root", str(config.archive_root)),
-            ("runtime.machine_name", config.machine_name),
-            ("runtime.dry_run", config.dry_run),
-            ("runtime.max_cases_per_run", config.max_cases_per_run),
-            ("runtime.max_attempts", config.max_attempts),
-            ("runtime.request_timeout_seconds", config.request_timeout_seconds),
-            ("auth.has_api_token", bool(config.api_token)),
-        ],
+    _log_event(
+        "startup_configuration_api",
+        {
+            "api_base_url": config.api_base_url,
+            "endpoint_url": endpoint_url,
+            "state_endpoint_url": state_endpoint_url,
+        },
+    )
+    _log_event(
+        "startup_configuration_paths",
+        {"archive_root": str(config.archive_root)},
+    )
+    _log_event(
+        "startup_configuration_runtime",
+        {
+            "machine_name": config.machine_name,
+            "dry_run": config.dry_run,
+            "max_cases_per_run": config.max_cases_per_run,
+            "max_attempts": config.max_attempts,
+            "request_timeout_seconds": config.request_timeout_seconds,
+        },
+    )
+    _log_event(
+        "startup_configuration_auth",
+        {"has_api_token": bool(config.api_token)},
     )
     _log_event("startup_configuration_end")
 
 
-def _log_summary_table(title: str, rows: list[tuple[str, Any]]) -> None:
-    """Emit a summary table as one log line.
+def _ordered_event_fields(event: str, fields: dict[str, Any]) -> list[tuple[str, Any]]:
+    """Return deterministic event fields using event-specific priority order."""
+    ordered: list[tuple[str, Any]] = []
+    seen: set[str] = set()
 
-    Parameters
-    ----------
-    title : str
-        Table title label.
-    rows : list[tuple[str, Any]]
-        Ordered list of ``(metric, value)`` summary rows.
-    """
-    row_pairs = [f"{metric}={_render_log_value(value)}" for metric, value in rows]
-    _log_event(
-        "summary_table",
-        {
-            "title": title,
-            "rows": " | ".join(row_pairs),
-            "row_count": len(rows),
-        },
-    )
+    for key in EVENT_FIELD_ORDER.get(event, ()):
+        if key in fields:
+            ordered.append((key, fields[key]))
+            seen.add(key)
+
+    for key in sorted(fields):
+        if key in seen:
+            continue
+
+        ordered.append((key, fields[key]))
+
+    return ordered
 
 
 def _log_event(event: str, fields: dict[str, Any] | None = None) -> None:
@@ -1744,8 +1985,8 @@ def _log_event(event: str, fields: dict[str, Any] | None = None) -> None:
     fields = {} if fields is None else fields
     parts = [f"event={event}"]
 
-    for key in sorted(fields):
-        parts.append(f"{key}={_render_log_value(fields[key])}")
+    for key, value in _ordered_event_fields(event, fields):
+        parts.append(f"{key}={_render_log_value(value)}")
 
     logger.info(" ".join(parts))
 
