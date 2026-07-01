@@ -160,9 +160,7 @@ def test_discover_case_executions_logs_scan_progress(
         logged_events.append((event, {} if fields is None else fields))
 
     monkeypatch.setattr(ingestor_module, "_log_event", fake_log_event)
-    monkeypatch.setattr(
-        ingestor_module, "DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES", 2
-    )
+    monkeypatch.setattr(ingestor_module, "DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES", 2)
 
     grouped = _discover_case_executions(archive_root, metadata_locator=lambda *_: {})
 
@@ -1105,9 +1103,7 @@ def test_completion_events_include_summary_counters(
     assert isinstance(
         dry_run_summary_candidates["rejected_incomplete_execution_ids"], int
     )
-    assert isinstance(
-        dry_run_summary_candidates["rejected_invalid_execution_ids"], int
-    )
+    assert isinstance(dry_run_summary_candidates["rejected_invalid_execution_ids"], int)
     assert isinstance(dry_run_summary_candidates["deferred_execution_ids"], int)
     assert isinstance(dry_run_summary_candidates["candidate_logs_emitted"], int)
     assert isinstance(dry_run_summary_candidates["candidate_logs_suppressed"], int)
@@ -1125,9 +1121,7 @@ def test_completion_events_include_summary_counters(
     assert isinstance(run_summary_outcomes["failure_count"], int)
     assert isinstance(run_summary_outcomes["accepted_execution_ids"], int)
     assert isinstance(run_summary_outcomes["rejected_existing_execution_ids"], int)
-    assert isinstance(
-        run_summary_outcomes["rejected_incomplete_execution_ids"], int
-    )
+    assert isinstance(run_summary_outcomes["rejected_incomplete_execution_ids"], int)
     assert isinstance(run_summary_outcomes["rejected_invalid_execution_ids"], int)
     assert isinstance(run_summary_outcomes["deferred_execution_ids"], int)
 
