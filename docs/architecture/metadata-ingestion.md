@@ -15,22 +15,23 @@ Browser/manual uploads are supported separately and are not part of automated HP
 
 ### Filesystem terms
 
-| Term              | Definition                                                                                             |
-| ----------------- | ------------------------------------------------------------------------------------------------------ |
+| Term              | Definition                                                                                                             |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | Staging directory | The active `PERF_ARCHIVE_DIR` tree where new performance output from E3SM runs appears before PACE moves it elsewhere. |
-| Archive directory | The long-term `OLD_PERF_ARCHIVE_DIR` tree managed by PACE after staging output is moved.               |
+| Archive directory | The long-term `OLD_PERF_ARCHIVE_DIR` tree managed by PACE after staging output is moved.                               |
 
 ### Case and execution state terms
 
 Case-level state is derived from execution-level state.
 
-| Term                      | Definition                                                                                                                                                                                                                                                                          |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Term                      | Definition                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Complete execution        | An execution directory that has the required metadata files `env_case.xml..*.gz`, `env_build.xml..*.gz`, `env_run.xml..*`, `README.case..*.gz`, `CaseStatus..*.gz`, and `e3sm_timing..*`, with the required metadata present in those files. The timing file must also provide a non-empty execution ID (LID). Optional `GIT_CONFIG..*.gz` and `GIT_STATUS..*.gz` are not required. |
-| Incomplete execution      | An execution directory that is missing one or more required metadata files, is missing required metadata in those files, does not provide a non-empty execution ID (LID) in the timing file, or cannot be read during discovery. Incomplete executions are skipped and do not enter case state. |
-| Complete case             | A case directory that contains at least one complete execution. Only complete executions contribute to the case's known execution IDs.                                                                                                                                            |
-| Incomplete case           | A case directory whose discovered execution subdirectories are all incomplete. It produces no collected execution IDs, is not submission-qualified, and does not enter stored state.                                                                                           |
-| Submission-qualified case | A parent case directory selected for submission because collection found at least one complete execution ID that is not present in the stored known execution IDs.                                                                                                               |
+| Incomplete execution      | An execution directory that is missing one or more required metadata files, is missing required metadata in those files, does not provide a non-empty execution ID (LID) in the timing file, or cannot be read during discovery. Incomplete executions are skipped and do not enter case state.                                                                                     |
+| Submission-qualified case | A parent case directory for which collection found at least one complete execution ID that is not present in the stored known execution IDs.                                                                                                                                                                                                                                       |
+| Selected submission case  | A submission-qualified case that a given runner invocation actually selects for dry-run reporting or submission after applying any per-run cap such as `MAX_CASES_PER_RUN`.                                                                                                                                                                                                       |
+| Deferred execution        | A newly discovered complete execution ID that belongs to a submission-qualified case but is not selected in the current runner invocation because a per-run cap stopped selection earlier.                                                                                                                                                                                         |
+| `processed_execution_ids` | The execution IDs submitted with one case ingestion request and later reconstructed from stored ingestion state to decide whether future collection should treat discovered executions as already known.                                                                                                                                                                            |
 
 ## Performance Directories
 
@@ -201,6 +202,16 @@ They also support these tuning options:
 - `MAX_CASES_PER_RUN`
 - `MAX_ATTEMPTS`
 - `REQUEST_TIMEOUT_SECONDS`
+
+`MAX_CASES_PER_RUN` is an optional per-run throttle. Leave it unset for normal
+operation when runners should submit every submission-qualified case they find.
+Set it when operators need to limit one invocation's submission volume, such as:
+
+- draining a large backlog gradually after downtime or a collection pause
+- reducing API, database, or upload load during periods of heavy ingestion
+- rolling out ingestion changes cautiously while watching logs and results
+- debugging or validating behavior on a small batch before allowing full drain
+- mitigating temporary backend or network instability without stopping collection
 
 ### Stored Results
 

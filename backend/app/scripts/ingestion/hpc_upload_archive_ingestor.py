@@ -4,6 +4,18 @@ This runner mirrors the NERSC path-ingestor state/dedupe behavior, but instead
 of sending a filesystem path it packages each changed case directory into a
 temporary ``.tar.gz`` archive and uploads it to the dedicated
 ``/api/v1/ingestions/from-hpc-upload`` endpoint.
+
+Runner terms used heavily in this module and shared helper logs:
+
+- submission-qualified case: case with at least one newly discovered complete
+  execution ID
+- selected submission case: submission-qualified case actually chosen for this
+  run after any ``MAX_CASES_PER_RUN`` cap
+- deferred execution: newly discovered complete execution ID not selected this
+  run because per-run capping stopped earlier selection
+- ``processed_execution_ids``: known execution IDs submitted for one case
+
+Canonical definitions live in ``docs/architecture/metadata-ingestion.md``.
 """
 
 from __future__ import annotations
@@ -112,7 +124,13 @@ def _run_ingestor(
         )
         return 1
 
-    scan_results, candidates, discovery_stats, state = _scan_archive(
+    (
+        scan_results,
+        candidates,
+        submission_qualified_case_count,
+        discovery_stats,
+        state,
+    ) = _scan_archive(
         config,
         state,
         metadata_locator=metadata_locator,
@@ -123,7 +141,8 @@ def _run_ingestor(
         {
             "archive_root": str(config.archive_root),
             "discovered_cases": len(scan_results),
-            "candidate_cases": len(candidates),
+            "submission_qualified_cases": submission_qualified_case_count,
+            "selected_submission_cases": len(candidates),
             "execution_dirs_scanned": discovery_stats["execution_dirs_scanned"],
             "execution_dirs_accepted": discovery_stats["execution_dirs_accepted"],
             "skipped_incomplete": discovery_stats["skipped_incomplete"],
@@ -135,6 +154,7 @@ def _run_ingestor(
         return _handle_dry_run(
             candidates,
             scan_results,
+            submission_qualified_case_count,
             discovery_stats,
         )
 
@@ -144,6 +164,7 @@ def _run_ingestor(
         config,
         endpoint_url,
         state,
+        submission_qualified_case_count,
         discovery_stats,
         sleep_fn=sleep_fn,
         post_request_fn=post_request_fn,

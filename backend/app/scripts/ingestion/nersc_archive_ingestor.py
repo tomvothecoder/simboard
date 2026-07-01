@@ -11,6 +11,18 @@ Each run executes four phases:
 2. Fetch persisted per-case state from SimBoard API.
 3. Submit one ingestion request per changed case with retry/backoff.
 4. Rely on DB writes from successful ingestions for future idempotent runs.
+
+Runner terms used heavily in this module and its logs:
+
+- submission-qualified case: case with at least one newly discovered complete
+  execution ID
+- selected submission case: submission-qualified case actually chosen for this
+  run after any ``MAX_CASES_PER_RUN`` cap
+- deferred execution: newly discovered complete execution ID not selected this
+  run because per-run capping stopped earlier selection
+- ``processed_execution_ids``: known execution IDs submitted for one case
+
+Canonical definitions live in ``docs/architecture/metadata-ingestion.md``.
 """
 
 from __future__ import annotations
@@ -313,7 +325,13 @@ def _run_ingestor(
         )
         return 1
 
-    scan_results, candidates, discovery_stats, state = _scan_archive(
+    (
+        scan_results,
+        candidates,
+        submission_qualified_case_count,
+        discovery_stats,
+        state,
+    ) = _scan_archive(
         config,
         state,
         metadata_locator=metadata_locator,
@@ -324,7 +342,8 @@ def _run_ingestor(
         {
             "archive_root": str(config.archive_root),
             "discovered_cases": len(scan_results),
-            "candidate_cases": len(candidates),
+            "submission_qualified_cases": submission_qualified_case_count,
+            "selected_submission_cases": len(candidates),
             "execution_dirs_scanned": discovery_stats["execution_dirs_scanned"],
             "execution_dirs_accepted": discovery_stats["execution_dirs_accepted"],
             "skipped_incomplete": discovery_stats["skipped_incomplete"],
@@ -347,6 +366,7 @@ def _run_ingestor(
         return _handle_dry_run(
             candidates,
             scan_results,
+            submission_qualified_case_count,
             discovery_stats,
         )
 
@@ -356,6 +376,7 @@ def _run_ingestor(
         config,
         endpoint_url,
         state,
+        submission_qualified_case_count,
         discovery_stats,
         sleep_fn=sleep_fn,
         post_request_fn=post_request_fn,
@@ -388,7 +409,11 @@ def _scan_archive(
     state: dict[str, Any],
     metadata_locator: Callable[[str], object],
 ) -> tuple[
-    list[CaseScanResult], list[IngestionCandidate], DiscoveryStats, dict[str, Any]
+    list[CaseScanResult],
+    list[IngestionCandidate],
+    int,
+    DiscoveryStats,
+    dict[str, Any],
 ]:
     """Compute scan results, candidates, and discovery counters.
 
@@ -401,8 +426,15 @@ def _scan_archive(
 
     Returns
     -------
-    tuple[list[CaseScanResult], list[IngestionCandidate], DiscoveryStats, dict[str, Any]]
-        Scan results, candidate list, discovery counters, and mutable state payload.
+    tuple[
+        list[CaseScanResult],
+        list[IngestionCandidate],
+        int,
+        DiscoveryStats,
+        dict[str, Any],
+    ]
+        Scan results, selected candidate list, submission-qualified case count,
+        discovery counters, and mutable state payload.
     """
     discovery_stats = _new_discovery_stats()
     grouped_executions = _discover_case_executions(
@@ -424,7 +456,7 @@ def _scan_archive(
         discovery_stats,
     )
 
-    return scan_results, candidates, discovery_stats, state
+    return scan_results, candidates, len(all_candidates), discovery_stats, state
 
 
 def _discover_case_executions(
@@ -758,6 +790,7 @@ def _build_ingestion_candidates(
 def _handle_dry_run(
     candidates: list[IngestionCandidate],
     scan_results: list[CaseScanResult],
+    submission_qualified_case_count: int,
     discovery_stats: DiscoveryStats,
 ) -> int:
     """Emit dry-run candidate logs and completion summaries.
@@ -768,6 +801,8 @@ def _handle_dry_run(
         Selected ingestion candidates.
     scan_results : list[CaseScanResult]
         Discovered case scan results.
+    submission_qualified_case_count : int
+        Count of cases with at least one new execution before per-run limiting.
     discovery_stats : DiscoveryStats
         Archive discovery counters.
 
@@ -806,7 +841,8 @@ def _handle_dry_run(
         "dry_run_completed",
         {
             "discovered_cases": len(scan_results),
-            "candidate_cases": len(candidates),
+            "submission_qualified_cases": submission_qualified_case_count,
+            "selected_submission_cases": len(candidates),
             "execution_dirs_scanned": discovery_stats["execution_dirs_scanned"],
             "execution_dirs_accepted": discovery_stats["execution_dirs_accepted"],
             "skipped_incomplete": discovery_stats["skipped_incomplete"],
@@ -829,7 +865,8 @@ def _handle_dry_run(
         rows=[
             ("mode", "dry-run"),
             ("discovered_cases", len(scan_results)),
-            ("candidate_cases", len(candidates)),
+            ("submission_qualified_cases", submission_qualified_case_count),
+            ("selected_submission_cases", len(candidates)),
             *_common_summary_rows(discovery_stats),
             ("candidate_logs_emitted", logged_candidates),
             ("candidate_logs_suppressed", suppressed_candidates),
@@ -844,6 +881,7 @@ def _handle_ingest_run(
     config: IngestorConfig,
     endpoint_url: str,
     state: dict[str, Any],
+    submission_qualified_case_count: int,
     discovery_stats: DiscoveryStats,
     sleep_fn: Callable[[float], None],
     post_request_fn: Callable[..., IngestionRequestResponse],
@@ -862,6 +900,8 @@ def _handle_ingest_run(
         Fully qualified ingestion endpoint URL.
     state : dict[str, Any]
         Mutable ingestion state payload.
+    submission_qualified_case_count : int
+        Count of cases with at least one new execution before per-run limiting.
     discovery_stats : DiscoveryStats
         Archive discovery counters.
     sleep_fn : Callable[[float], None]
@@ -925,7 +965,8 @@ def _handle_ingest_run(
         "run_completed",
         {
             "scanned_cases": len(scan_results),
-            "candidate_cases": len(candidates),
+            "submission_qualified_cases": submission_qualified_case_count,
+            "selected_submission_cases": len(candidates),
             "success_count": success_count,
             "failure_count": failure_count,
             "execution_dirs_scanned": discovery_stats["execution_dirs_scanned"],
@@ -950,7 +991,8 @@ def _handle_ingest_run(
         rows=[
             ("mode", "ingest"),
             ("scanned_cases", len(scan_results)),
-            ("candidate_cases", len(candidates)),
+            ("submission_qualified_cases", submission_qualified_case_count),
+            ("selected_submission_cases", len(candidates)),
             ("success_count", success_count),
             ("failure_count", failure_count),
             *_common_summary_rows(discovery_stats),

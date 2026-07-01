@@ -224,6 +224,16 @@ def test_run_ingestor_logs_execution_collection_outcomes_for_state_and_limit(
             "reason": "max_cases_per_run",
         },
     ]
+    scan_completed = [
+        fields for event, fields in logged_events if event == "scan_completed"
+    ][0]
+    dry_run_completed = [
+        fields for event, fields in logged_events if event == "dry_run_completed"
+    ][0]
+
+    for payload in (scan_completed, dry_run_completed):
+        assert payload["submission_qualified_cases"] == 2
+        assert payload["selected_submission_cases"] == 1
 
 
 def test_build_ingestion_candidates_is_idempotent() -> None:
@@ -889,6 +899,8 @@ def test_completion_events_include_summary_counters(
     ][0]
 
     for payload in (dry_run_completed, run_completed):
+        assert isinstance(payload["submission_qualified_cases"], int)
+        assert isinstance(payload["selected_submission_cases"], int)
         assert isinstance(payload["execution_dirs_scanned"], int)
         assert isinstance(payload["execution_dirs_accepted"], int)
         assert isinstance(payload["skipped_incomplete"], int)
