@@ -9,7 +9,7 @@ Neither script calls the API, accesses the database, or changes archive files.
 Run from the repository root on a host with archive access:
 
 ```bash
-debug='docs/github-issues/401-stale-discovery-recovery/2-false-success/debug-validation-errors'
+debug='docs/github-issues/401-stale-discovery-recovery/2-false-success/3-debug-validation-errors'
 uv run --project backend python "$debug/scan_validation_errors.py"
 ```
 

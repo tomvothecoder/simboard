@@ -2,7 +2,7 @@
 
 Run from the repository root on a host with archive access:
 
-    uv run --project backend python docs/github-issues/401-stale-discovery-recovery/2-false-success/debug-validation-errors/reproduce_validation_errors.py
+    uv run --project backend python docs/github-issues/401-stale-discovery-recovery/2-false-success/3-debug-validation-errors/reproduce_validation_errors.py
 
 Use --archive-root /OLD_PERF for the container mount, or --field to select one
 example. Reads metadata only: no API calls, database access, or archive writes.
@@ -17,7 +17,7 @@ that ingestion sends to Pydantic. Missing optional metadata remains visible.
 
 Run deterministic scalar checks without archive access:
 
-    uv run --project backend python -m doctest docs/github-issues/401-stale-discovery-recovery/2-false-success/debug-validation-errors/reproduce_validation_errors.py
+    uv run --project backend python -m doctest docs/github-issues/401-stale-discovery-recovery/2-false-success/3-debug-validation-errors/reproduce_validation_errors.py
 """
 
 from __future__ import annotations

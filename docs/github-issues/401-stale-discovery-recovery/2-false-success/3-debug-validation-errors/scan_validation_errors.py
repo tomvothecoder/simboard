@@ -7,7 +7,7 @@ some fields could not be checked; exit 2 means invalid input or an output failur
 
 Run from the repository root on a host with archive access:
 
-    uv run --project backend python docs/github-issues/401-stale-discovery-recovery/2-false-success/debug-validation-errors/scan_validation_errors.py
+    uv run --project backend python docs/github-issues/401-stale-discovery-recovery/2-false-success/3-debug-validation-errors/scan_validation_errors.py
 """
 
 from __future__ import annotations
