@@ -1,0 +1,114 @@
+{
+  "completed": 2794,
+  "executions_with_validation_errors": 2794,
+  "field_error_count": 5538,
+  "executions_with_source_issues": 0,
+  "blocked_fields": 0,
+  "field_status_counts": {
+    "validated": 16809,
+    "invalid": 5538,
+    "skipped": 5
+  },
+  "validation_groups": [
+    {
+      "field": "compset",
+      "code": "string_type",
+      "cause": "flag_not_found",
+      "affected_executions": 2740,
+      "field_errors": 2740,
+      "matching_original_errors": 2740,
+      "additional_errors": 0,
+      "examples": [
+        "/global/cfs/cdirs/e3sm/OLD_PERF/2025-01/performance_archive_2025_01_03_07_00_18/COMPLETED/bogensch/scream_dpxx_CASS.cntl.001b/34526116.250102-180121",
+        "/global/cfs/cdirs/e3sm/OLD_PERF/2025-01/performance_archive_2025_01_04_07_01_01/COMPLETED/bogensch/scream_dpxx_CASS.conv.001b/34539986.250103-083630",
+        "/global/cfs/cdirs/e3sm/OLD_PERF/2025-01/performance_archive_2025_01_04_07_01_01/COMPLETED/bogensch/scream_dpxx_COMBLE.cntl.001a/34542102.250103-103438"
+      ]
+    },
+    {
+      "field": "git_repository_url",
+      "code": "url_parsing",
+      "cause": "url_without_scheme",
+      "affected_executions": 4,
+      "field_errors": 4,
+      "matching_original_errors": 0,
+      "additional_errors": 4,
+      "examples": [
+        "/global/cfs/cdirs/e3sm/OLD_PERF/2026-07/performance_archive_2026_07_15_07_26_41/COMPLETED/mchinita/scream_dp_BX_solverval_shoc_thomas/55491687.260704-123353",
+        "/global/cfs/cdirs/e3sm/OLD_PERF/2026-07/performance_archive_2026_07_15_07_26_41/COMPLETED/mchinita/scream_dp_BX_solverval_shocmf_thomas/55491680.260704-120952",
+        "/global/cfs/cdirs/e3sm/OLD_PERF/2026-07/performance_archive_2026_07_15_07_26_41/COMPLETED/mchinita/scream_dp_GA_solverval_shoc_thomas/55483302.260704-095846"
+      ]
+    },
+    {
+      "field": "git_repository_url",
+      "code": "url_scheme",
+      "cause": "url_scheme:ssh",
+      "affected_executions": 36,
+      "field_errors": 36,
+      "matching_original_errors": 36,
+      "additional_errors": 0,
+      "examples": [
+        "/global/cfs/cdirs/e3sm/OLD_PERF/2025-09/performance_archive_2025_09_16_08_00_31/COMPLETED/gr7610/FAQP-v3.0-ZMv1-dt_1800-ne30_ne30/42840327.250916-051057",
+        "/global/cfs/cdirs/e3sm/OLD_PERF/2025-09/performance_archive_2025_09_16_08_00_31/COMPLETED/gr7610/FAQP-v3.0-ZMv1-dt_600-ne16_ne16/42823729.250915-142703",
+        "/global/cfs/cdirs/e3sm/OLD_PERF/2025-09/performance_archive_2025_09_16_08_00_31/COMPLETED/gr7610/FAQP-v3.0-ZMv1-dt_600-ne16_ne16/42840275.250916-045926"
+      ]
+    },
+    {
+      "field": "grid_name",
+      "code": "string_type",
+      "cause": "flag_not_found",
+      "affected_executions": 2753,
+      "field_errors": 2753,
+      "matching_original_errors": 13,
+      "additional_errors": 2740,
+      "examples": [
+        "/global/cfs/cdirs/e3sm/OLD_PERF/2025-01/performance_archive_2025_01_03_07_00_18/COMPLETED/bogensch/scream_dpxx_CASS.cntl.001b/34526116.250102-180121",
+        "/global/cfs/cdirs/e3sm/OLD_PERF/2025-01/performance_archive_2025_01_04_07_01_01/COMPLETED/bogensch/scream_dpxx_CASS.conv.001b/34539986.250103-083630",
+        "/global/cfs/cdirs/e3sm/OLD_PERF/2025-01/performance_archive_2025_01_04_07_01_01/COMPLETED/bogensch/scream_dpxx_COMBLE.cntl.001a/34542102.250103-103438"
+      ]
+    },
+    {
+      "field": "simulation_start_date",
+      "code": "date_type",
+      "cause": "year_zero_date",
+      "affected_executions": 5,
+      "field_errors": 5,
+      "matching_original_errors": 5,
+      "additional_errors": 0,
+      "examples": [
+        "/global/cfs/cdirs/e3sm/OLD_PERF/2025-12/performance_archive_2025_12_24_07_00_54/COMPLETED/zender/v3.LR.I.era5_1980s_hex_cld_srt_frn_spn/46899412.251223-155819",
+        "/global/cfs/cdirs/e3sm/OLD_PERF/2025-12/performance_archive_2025_12_25_07_00_51/COMPLETED/zender/v3.LR.I.era5_1980s_hex_cld_srt_frn_spn/46900644.251223-225236",
+        "/global/cfs/cdirs/e3sm/OLD_PERF/2026-07/performance_archive_2026_07_15_07_26_41/COMPLETED/sprice/20260624.ERA5r025_r05_IcoswISC30E3r5.pm-cpu.20TR/54984820.260624-163227"
+      ]
+    }
+  ],
+  "original_error_groups": [
+    {
+      "field": "compset",
+      "code": "string_type",
+      "affected_executions": 2740
+    },
+    {
+      "field": "git_repository_url",
+      "code": "url_scheme",
+      "affected_executions": 36
+    },
+    {
+      "field": "grid_name",
+      "code": "string_type",
+      "affected_executions": 13
+    },
+    {
+      "field": "simulation_start_date",
+      "code": "date_type",
+      "affected_executions": 5
+    }
+  ],
+  "source_issue_groups": [],
+  "source_log": "/global/u2/v/vo13/tomvothecoder/simboard/docs/github-issues/401-stale-discovery-recovery/2-false-success/2-replay-results/replay-final.jsonl",
+  "source_root": "/global/cfs/cdirs/e3sm/OLD_PERF",
+  "archive_root": "/global/cfs/cdirs/e3sm/OLD_PERF",
+  "candidates": 2794,
+  "selected": 2794,
+  "not_selected": 0,
+  "details_file": "/global/u2/v/vo13/tomvothecoder/simboard/docs/github-issues/401-stale-discovery-recovery/2-false-success/debug-validation-errors/validation-scan-20261023T164756281453Z.jsonl"
+}

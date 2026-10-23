@@ -1,0 +1,2 @@
+# Version the reviewed baseline evidence; keep other runtime logs ignored.
+!/perlmutter-full-archive-reingestion.log

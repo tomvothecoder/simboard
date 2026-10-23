@@ -1,0 +1,131 @@
+[
+  {
+    "field": "compset",
+    "expected_code": "string_type",
+    "execution_dir": "/global/cfs/cdirs/e3sm/OLD_PERF/2025-07/performance_archive_2025_07_30_08_03_25/COMPLETED/ajonko/BHIST_10xGFED_BC/41134444.250729-031144",
+    "sources": [
+      {
+        "file_spec": "readme_case",
+        "path": "/global/cfs/cdirs/e3sm/OLD_PERF/2025-07/performance_archive_2025_07_30_08_03_25/COMPLETED/ajonko/BHIST_10xGFED_BC/41134444.250729-031144/CaseDocs.41134444.250729-031144/README.case.41134444.250729-031144.gz",
+        "field_present": true,
+        "parsed_value": null
+      }
+    ],
+    "parsed_value": null,
+    "validation_input": null,
+    "validation_input_type": "NoneType",
+    "validation_schema": {
+      "type": "string"
+    },
+    "status": "reproduced",
+    "errors": [
+      {
+        "type": "string_type",
+        "loc": [],
+        "msg": "Input should be a valid string",
+        "input": null
+      }
+    ],
+    "message": "1 validation error for str\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.12/v/string_type"
+  },
+  {
+    "field": "git_repository_url",
+    "expected_code": "url_scheme",
+    "execution_dir": "/global/cfs/cdirs/e3sm/OLD_PERF/2025-09/performance_archive_2025_09_20_08_05_12/COMPLETED/gr7610/FAQP-v3.0-ZMv1.AVG_TIME-dt_1800-ne30_ne30/42924507.250919-092412",
+    "sources": [
+      {
+        "file_spec": "git_config",
+        "path": "/global/cfs/cdirs/e3sm/OLD_PERF/2025-09/performance_archive_2025_09_20_08_05_12/COMPLETED/gr7610/FAQP-v3.0-ZMv1.AVG_TIME-dt_1800-ne30_ne30/42924507.250919-092412/GIT_CONFIG.42924507.250919-092412.gz",
+        "field_present": true,
+        "parsed_value": "ssh://git@github.com/mr-gabrielrios/E3SM.git"
+      }
+    ],
+    "parsed_value": "ssh://git@github.com/mr-gabrielrios/E3SM.git",
+    "validation_input": "ssh://git@github.com/mr-gabrielrios/E3SM.git",
+    "validation_input_type": "str",
+    "validation_schema": {
+      "format": "uri",
+      "maxLength": 2083,
+      "minLength": 1,
+      "type": "string"
+    },
+    "status": "reproduced",
+    "errors": [
+      {
+        "type": "url_scheme",
+        "loc": [],
+        "msg": "URL scheme should be 'http' or 'https'",
+        "input": "ssh://git@github.com/mr-gabrielrios/E3SM.git",
+        "ctx": {
+          "expected_schemes": "'http' or 'https'"
+        }
+      }
+    ],
+    "message": "1 validation error for function-wrap[wrap_val()]\n  URL scheme should be 'http' or 'https' [type=url_scheme, input_value='ssh://git@github.com/mr-gabrielrios/E3SM.git', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/url_scheme"
+  },
+  {
+    "field": "grid_name",
+    "expected_code": "string_type",
+    "execution_dir": "/global/cfs/cdirs/e3sm/OLD_PERF/2026-07/performance_archive_2026_07_15_07_26_41/COMPLETED/anolan/omega-oQU240/55916377.260714-145127",
+    "sources": [
+      {
+        "file_spec": "readme_case",
+        "path": "/global/cfs/cdirs/e3sm/OLD_PERF/2026-07/performance_archive_2026_07_15_07_26_41/COMPLETED/anolan/omega-oQU240/55916377.260714-145127/CaseDocs.55916377.260714-145127/README.case.55916377.260714-145127.gz",
+        "field_present": true,
+        "parsed_value": null
+      }
+    ],
+    "parsed_value": null,
+    "validation_input": null,
+    "validation_input_type": "NoneType",
+    "validation_schema": {
+      "type": "string"
+    },
+    "status": "reproduced",
+    "errors": [
+      {
+        "type": "string_type",
+        "loc": [],
+        "msg": "Input should be a valid string",
+        "input": null
+      }
+    ],
+    "message": "1 validation error for str\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.12/v/string_type"
+  },
+  {
+    "field": "simulation_start_date",
+    "expected_code": "date_type",
+    "execution_dir": "/global/cfs/cdirs/e3sm/OLD_PERF/2026-07/performance_archive_2026_07_15_07_26_41/COMPLETED/sprice/20260624.ERA5r025_r05_IcoswISC30E3r5.pm-cpu.20TR/54984820.260624-163227",
+    "sources": [
+      {
+        "file_spec": "case_docs_env_run",
+        "path": "/global/cfs/cdirs/e3sm/OLD_PERF/2026-07/performance_archive_2026_07_15_07_26_41/COMPLETED/sprice/20260624.ERA5r025_r05_IcoswISC30E3r5.pm-cpu.20TR/54984820.260624-163227/CaseDocs.54984820.260624-163227/env_run.xml.54984820.260624-163227.gz",
+        "field_present": true,
+        "parsed_value": "0000-01-02"
+      },
+      {
+        "file_spec": "cpl_log",
+        "path": "/global/cfs/cdirs/e3sm/OLD_PERF/2026-07/performance_archive_2026_07_15_07_26_41/COMPLETED/sprice/20260624.ERA5r025_r05_IcoswISC30E3r5.pm-cpu.20TR/54984820.260624-163227/cpl.log.54984820.260624-163227.gz",
+        "field_present": false,
+        "parsed_value": null
+      }
+    ],
+    "parsed_value": "0000-01-02",
+    "validation_input": null,
+    "validation_input_type": "NoneType",
+    "validation_schema": {
+      "format": "date",
+      "type": "string"
+    },
+    "status": "reproduced",
+    "errors": [
+      {
+        "type": "date_type",
+        "loc": [],
+        "msg": "Input should be a valid date",
+        "input": null
+      }
+    ],
+    "message": "1 validation error for date\n  Input should be a valid date [type=date_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.12/v/date_type"
+  }
+]

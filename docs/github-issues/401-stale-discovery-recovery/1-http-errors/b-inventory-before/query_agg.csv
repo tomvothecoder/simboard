@@ -1,0 +1,3 @@
+"database_status","observations","affected_case_paths","fresh_discovery_qualified","resolved_identities","existing_observations_without_exact_mapping"
+execution_exists,1311,905,1311,1311,0
+rejected_incomplete,42,19,0,0,0

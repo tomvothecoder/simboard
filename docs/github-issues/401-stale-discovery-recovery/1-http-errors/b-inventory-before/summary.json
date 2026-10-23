@@ -1,0 +1,16 @@
+{
+  "started_at": "2026-10-22T22:06:58.778036+00:00",
+  "finished_at": "2026-10-22T22:12:40.418393+00:00",
+  "input_log": "/global/u2/v/vo13/tomvothecoder/simboard/backend/qa/401-stale-discovery-recovery/perlmutter-full-archive-reingestion.log",
+  "archive_root": "/global/cfs/cdirs/e3sm/OLD_PERF",
+  "selected_case_paths": 905,
+  "observations": 1353,
+  "fresh_discovery_qualified": 1311,
+  "status_counts": {
+    "qualified": 1311,
+    "rejected_incomplete": 42
+  },
+  "requires_investigation": false,
+  "api_requests": 0,
+  "database_connections": 0
+}

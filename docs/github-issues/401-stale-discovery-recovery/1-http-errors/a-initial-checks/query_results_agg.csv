@@ -1,0 +1,5 @@
+"error_group","machine","machine_found","affected_cases","affected_archive_paths","http_409_failed_attempts","http_500_failed_attempts","case_paths_reported_succeeded","case_paths_reported_failed","accepted_executions_checked","existing_executions","accepted_executions_without_catalog_match","missing_cases","missing_executions_in_existing_cases","cases_without_accepted_discovery","existing_executions_without_archive_mapping"
+all_http_errors,perlmutter,true,851,905,216,689,689,216,3308,3305,3,0,3,0,0
+http_409_only,perlmutter,true,162,202,202,0,0,202,2064,2061,3,0,3,0,0
+http_500_only,perlmutter,true,679,679,0,679,679,0,1093,1093,0,0,0,0,0
+both_http_409_and_500,perlmutter,true,10,24,14,10,10,14,151,151,0,0,0,0,0
