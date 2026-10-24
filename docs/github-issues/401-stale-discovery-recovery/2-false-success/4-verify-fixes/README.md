@@ -51,3 +51,31 @@ or incomplete replay; CLI/input errors exit 2. A duplicate does not prove the
 date was reparsed. Inspect `request_finished.response_body` for remaining errors:
 another validation group may now block an execution after the date fix.
 This checks ingestion outcomes, not persisted date round-trip values.
+
+## Verify component-set validation (PR #428)
+
+`verify_compset.py` uses the same Perlmutter upload flow and options. It selects
+all executions with invalid component-set fields in the saved scan, including
+secondary errors, and deduplicates paths. It recognizes historical `compset`
+errors and the renamed `compset_long_name` field. It does not select unrelated
+`compset_alias` errors.
+
+Deploy PR #428 and its database migration before applying. With the API URL and
+admin/service-account token already set, run from the repository root:
+
+```bash
+VERIFY=docs/github-issues/401-stale-discovery-recovery/2-false-success/4-verify-fixes
+
+# Preview all matching executions; no requests.
+uv run --project backend python "$VERIFY/verify_compset.py"
+
+# Upload all matching executions; writes ingestion data.
+uv run --project backend python "$VERIFY/verify_compset.py" \
+  --apply --log "$VERIFY/compset-all.jsonl"
+```
+
+Omit `--limit` to loop over every matching execution. Each response remains in
+the log, including any other validation error exposed after the component-set
+fix. Creation confirms ingestion succeeds; duplicates do not prove metadata was
+reparsed. This script does not repair metadata on existing executions or check
+persisted `compset_long_name` values.

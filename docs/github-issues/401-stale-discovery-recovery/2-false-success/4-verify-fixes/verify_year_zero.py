@@ -42,8 +42,15 @@ SPEC.loader.exec_module(replay_client)
 ORIGINAL_CLASSIFY = replay_client.classify_response
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+def main(argv: list[str] | None = None, *, group: str = "year_zero_date") -> int:
+    parser = argparse.ArgumentParser(
+        description=(
+            __doc__
+            if group == "year_zero_date"
+            else "Replay compset/compset_long_name validation failures to verify PR #428. "
+            "Run on Perlmutter. Preview by default; --apply uploads local executions."
+        )
+    )
     parser.add_argument("--scan", type=Path, default=DEFAULT_SCAN)
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--log", type=Path, help="New JSONL output; never overwritten")
@@ -64,7 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     if not math.isfinite(args.delay) or args.delay < 0:
         parser.error("--delay must be nonnegative and finite")
     try:
-        candidates = load_candidates(args.scan)
+        candidates = load_candidates(args.scan, group=group)
         endpoint = replay_client._endpoint(args.api_base_url).replace(
             "/from-path", "/from-hpc-upload"
         )
@@ -72,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(str(exc))
     selected = candidates[: args.limit]
     if not selected:
-        parser.error("No year_zero_date executions found in scan")
+        parser.error(f"No {group} executions found in scan")
     if not args.apply:
         print(
             json.dumps(
@@ -104,8 +111,12 @@ def main(argv: list[str] | None = None) -> int:
         parser.exit(1, f"Verification stopped: {exc}. Inspect log before restarting.\n")
 
 
-def load_candidates(scan: Path) -> list[dict[str, str]]:
-    """Select every year-zero execution, including secondary errors; deduplicate."""
+def load_candidates(
+    scan: Path, *, group: str = "year_zero_date"
+) -> list[dict[str, str]]:
+    """Select every execution in the error group, including secondary errors."""
+    if group not in {"year_zero_date", "compset_long_name"}:
+        raise ValueError(f"Unsupported validation group: {group}")
     candidates = {}
     with scan.open(encoding="utf-8") as stream:
         for number, line in enumerate(stream, 1):
@@ -113,11 +124,7 @@ def load_candidates(scan: Path) -> list[dict[str, str]]:
                 continue
             try:
                 record = json.loads(line)
-                if not any(
-                    field.get("field") == "simulation_start_date"
-                    and field.get("cause") == "year_zero_date"
-                    for field in record["fields"]
-                ):
+                if not _matches_group(record, group):
                     continue
                 path = record["execution_path"]
                 candidate = replay_client._candidate(
@@ -135,6 +142,27 @@ def load_candidates(scan: Path) -> list[dict[str, str]]:
                 raise ValueError(f"{scan}:{number}: {exc}") from exc
 
     return list(candidates.values())
+
+
+def _matches_group(record: dict, group: str) -> bool:
+    if group == "year_zero_date":
+        return any(
+            field.get("field") == "simulation_start_date"
+            and field.get("cause") == "year_zero_date"
+            for field in record["fields"]
+        )
+
+    # Historical scans use "compset"; PR #428 renamed it "compset_long_name".
+    names = {"compset", "compset_long_name"}
+
+    return any(
+        field.get("field") in names
+        and (field.get("status") == "invalid" or field.get("errors"))
+        for field in record["fields"]
+    ) or any(
+        error.get("field") in names and error.get("error_type") == "ValidationError"
+        for error in record.get("original_errors", [])
+    )
 
 
 def _post_upload(endpoint, token, candidate, timeout):
