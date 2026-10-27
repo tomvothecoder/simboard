@@ -75,7 +75,7 @@ export SIMBOARD_API_TOKEN
 Preview the one-row input. Confirm the dev endpoint and selected execution:
 
 ```bash
-uv run --project backend python "$qa/replay_unresolved_executions.py" "$qa/replay-zender.csv" --limit 1
+uv run --project backend python "$qa/2-replay-results/replay_unresolved_executions.py" "$qa/replay-zender.csv" --limit 1
 ```
 
 **Apply writes catalog data and ingestion history.** Confirm the deployed API supports
@@ -83,7 +83,7 @@ uv run --project backend python "$qa/replay_unresolved_executions.py" "$qa/repla
 Send one request and retain its full response:
 
 ```bash
-uv run --project backend python "$qa/replay_unresolved_executions.py" "$qa/replay-zender.csv" --limit 1 --apply --log "$qa/replay-zender.jsonl"
+uv run --project backend python "$qa/2-replay-results/replay_unresolved_executions.py" "$qa/replay-zender.csv" --limit 1 --apply --log "$qa/replay-zender.jsonl"
 ```
 
 ### c. Match API logs by **execution path and UTC window**
@@ -166,7 +166,7 @@ No `--limit` means the full CSV, not a sample:
 
 ```bash
 qa='docs/github-issues/401-stale-discovery-recovery/2-false-success'
-uv run --project backend python "$qa/replay_unresolved_executions.py" "$qa/1-stale-discovery/replay-remaining.csv"
+uv run --project backend python "$qa/2-replay-results/replay_unresolved_executions.py" "$qa/1-stale-discovery/replay-remaining.csv"
 ```
 
 ### Run the full diagnostic pass
@@ -176,7 +176,7 @@ Requests run sequentially, without automatic retries:
 
 ```bash
 runlog="$qa/replay-full-$(date -u +%Y%m%dT%H%M%SZ).jsonl"
-uv run --project backend python "$qa/replay_unresolved_executions.py" "$qa/1-stale-discovery/replay-remaining.csv" --apply --log "$runlog"
+uv run --project backend python "$qa/2-replay-results/replay_unresolved_executions.py" "$qa/1-stale-discovery/replay-remaining.csv" --apply --log "$runlog"
 ```
 
 A failure exit code can mean every request ran but executions failed. Check
@@ -195,9 +195,9 @@ The script validates logged request identities against the CSV before any reques
 For example, resume at index 101 after confirming the state of request 100:
 
 ```bash
-uv run --project backend python "$qa/replay_unresolved_executions.py" "$qa/1-stale-discovery/replay-remaining.csv" --resume-from "$runlog" --start-index 101
+uv run --project backend python "$qa/2-replay-results/replay_unresolved_executions.py" "$qa/1-stale-discovery/replay-remaining.csv" --resume-from "$runlog" --start-index 101
 resumed_log="$qa/replay-resumed-$(date -u +%Y%m%dT%H%M%SZ).jsonl"
-uv run --project backend python "$qa/replay_unresolved_executions.py" "$qa/1-stale-discovery/replay-remaining.csv" --resume-from "$runlog" --start-index 101 --apply --log "$resumed_log"
+uv run --project backend python "$qa/2-replay-results/replay_unresolved_executions.py" "$qa/1-stale-discovery/replay-remaining.csv" --resume-from "$runlog" --start-index 101 --apply --log "$resumed_log"
 ```
 
 Preview sends no requests. Apply requires a new output log and never changes the
